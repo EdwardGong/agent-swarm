@@ -1,0 +1,44 @@
+# Research Sweep Schedule
+# Each sweep defines a recurring research task the swarm runs automatically.
+#
+# Fields:
+#   name:       Human-readable identifier (used in logs and report filenames)
+#   query:      The research prompt sent to the swarm
+#   schedule:   Cron-style schedule — "daily", "hourly", "weekly", or "every Xm/Xh"
+#   namespace:  Memory namespace to store findings in (keeps domains isolated)
+#   report_dir: Where to write the output report (~ is expanded)
+#   enabled:    Set to false to skip without deleting
+
+sweeps:
+  - name: crypto-market-pulse
+    query: >
+      Check current prices for bitcoin, ethereum, and solana.
+      Get the Fear & Greed Index. Search for the top crypto market news
+      from the last 24 hours. Save all findings to memory in the 'crypto'
+      namespace, then produce a brief market pulse report.
+    schedule: "daily"
+    namespace: crypto
+    report_dir: ~/workspace/ai/agent-swarm/reports/crypto
+    enabled: true
+
+  - name: commodities-weekly
+    query: >
+      Get current prices for gold, silver, copper, oil, and natural_gas.
+      Search for recent commodities market news and any notable supply/demand
+      shifts. Save findings to memory in the 'commodities' namespace,
+      then write a weekly commodities briefing report.
+    schedule: "weekly"
+    namespace: commodities
+    report_dir: ~/workspace/ai/agent-swarm/reports/commodities
+    enabled: true
+
+  - name: ai-landscape
+    query: >
+      Research the latest developments in local AI agent frameworks,
+      open-source LLM releases, and notable AI tooling launches from
+      the past week. Save findings to the 'ai' namespace and produce
+      a weekly AI landscape report.
+    schedule: "weekly"
+    namespace: ai
+    report_dir: ~/workspace/ai/agent-swarm/reports/ai
+    enabled: true

@@ -201,31 +201,172 @@ def run_shell(command: str) -> str:
         return f"Shell error: {e}"
 
 
+# --- Market / Financial -----------------------------------------------
+
+@tool
+def get_commodity_prices(symbols: list[str]) -> str:
+    """Get current commodity prices from public APIs.
+
+    Args:
+        symbols: Commodity symbols, e.g. ['gold', 'silver', 'copper', 'oil', 'natural_gas', 'wheat', 'corn'].
+    """
+    try:
+        import requests as req
+        results = []
+        # Use metals.dev free API for precious metals
+        metals_map = {"gold": "XAU", "silver": "XAG", "platinum": "XPT", "palladium": "XPD"}
+        other_symbols = []
+
+        metals_to_fetch = {s: metals_map[s] for s in symbols if s in metals_map}
+        if metals_to_fetch:
+            try:
+                resp = req.get("https://api.metals.dev/v1/latest?api_key=demo&currency=USD&unit=toz", timeout=10)
+                if resp.ok:
+                    data = resp.json().get("metals", {})
+                    for name, code in metals_to_fetch.items():
+                        price = data.get(code)
+                        if price:
+                            results.append(f"{name.upper()}: ${price:,.2f}/oz")
+                        else:
+                            results.append(f"{name.upper()}: price unavailable")
+                else:
+                    results.append(f"Metals API error: HTTP {resp.status_code}")
+            except Exception as e:
+                results.append(f"Metals API error: {e}")
+
+        for s in symbols:
+            if s not in metals_map:
+                other_symbols.append(s)
+
+        # Fallback: use DuckDuckGo for non-metal commodities
+        if other_symbols:
+            try:
+                from ddgs import DDGS
+                for sym in other_symbols[:5]:
+                    hits = list(DDGS().text(f"{sym} commodity price today USD", max_results=2))
+                    if hits:
+                        results.append(f"{sym.upper()}: {hits[0]['body'][:200]}")
+                    else:
+                        results.append(f"{sym.upper()}: no price data found")
+            except Exception as e:
+                results.append(f"Search fallback error: {e}")
+
+        return "\n".join(results) if results else "No price data available."
+    except Exception as e:
+        return f"Commodity price error: {e}"
+
+
+@tool
+def get_crypto_prices(symbols: list[str]) -> str:
+    """Get current cryptocurrency prices from CoinGecko.
+
+    Args:
+        symbols: Crypto IDs, e.g. ['bitcoin', 'ethereum', 'solana'].
+    """
+    try:
+        import requests as req
+        ids = ",".join(s.lower() for s in symbols[:10])
+        resp = req.get(
+            f"https://api.coingecko.com/api/v3/simple/price"
+            f"?ids={ids}&vs_currencies=usd&include_24hr_change=true"
+            f"&include_market_cap=true",
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        lines = []
+        for sym in symbols:
+            key = sym.lower()
+            if key in data:
+                d = data[key]
+                price = d.get("usd", "N/A")
+                change = d.get("usd_24h_change")
+                mcap = d.get("usd_market_cap")
+                change_str = f" ({change:+.1f}% 24h)" if change is not None else ""
+                mcap_str = f" | MCap: ${mcap:,.0f}" if mcap else ""
+                lines.append(f"{sym.upper()}: ${price:,.2f}{change_str}{mcap_str}")
+            else:
+                lines.append(f"{sym.upper()}: not found on CoinGecko")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Crypto price error: {e}"
+
+
+@tool
+def get_fear_greed_index() -> str:
+    """Get the current Crypto Fear & Greed Index."""
+    try:
+        import requests as req
+        resp = req.get("https://api.alternative.me/fng/?limit=7", timeout=10)
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+        if not data:
+            return "Fear & Greed data unavailable."
+
+        lines = ["Crypto Fear & Greed Index (last 7 days):"]
+        for entry in data:
+            val = entry.get("value", "?")
+            label = entry.get("value_classification", "?")
+            ts = entry.get("timestamp", "")
+            date = ""
+            if ts:
+                import datetime
+                date = datetime.datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d")
+            lines.append(f"  {date}: {val} ({label})")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Fear & Greed error: {e}"
+
+
+@tool
+def get_market_news(query: str) -> str:
+    """Search for recent financial/market news on a topic.
+
+    Args:
+        query: The market topic to search for (e.g. 'copper futures', 'bitcoin ETF').
+    """
+    try:
+        from ddgs import DDGS
+        results = list(DDGS().news(query, max_results=8))
+        if not results:
+            return "No market news found."
+        lines = []
+        for r in results:
+            date = r.get("date", "")[:10]
+            lines.append(f"[{date}] **{r['title']}**\n{r.get('url', '')}\n{r['body'][:200]}\n")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Market news error: {e}"
+
+
 # --- Memory / Research ------------------------------------------------
 
 @tool
-def save_to_memory(content: str, source: str, topic: str) -> str:
+def save_to_memory(content: str, source: str, topic: str, namespace: str = "general") -> str:
     """Save a research finding to persistent memory for later recall.
 
     Args:
         content: The key finding or information to remember.
         source: Where this came from (URL, document name, etc.).
         topic: The research topic this relates to.
+        namespace: Memory namespace to isolate domains (e.g. 'crypto', 'commodities').
     """
     from apps.research_swarm.memory import save_finding
-    return save_finding(content, source, topic)
+    return save_finding(content, source, topic, namespace=namespace)
 
 
 @tool
-def recall_research(query: str, topic: str = "") -> str:
+def recall_research(query: str, topic: str = "", namespace: str = "general") -> str:
     """Search past research findings stored in memory.
 
     Args:
         query: What to search for in past research.
         topic: Optional topic filter to narrow results.
+        namespace: Memory namespace to search in (e.g. 'crypto', 'commodities').
     """
     from apps.research_swarm.memory import recall_formatted
-    return recall_formatted(query, k=5, topic=topic or None)
+    return recall_formatted(query, k=5, topic=topic or None, namespace=namespace)
 
 
 @tool
@@ -286,4 +427,11 @@ def register_all(registry: ToolRegistry) -> None:
         tools=[recall_research, read_file, write_report],
         tags={"writing", "reports"},
         description="Report writing with memory recall.",
+    ))
+    registry.register(ToolSet(
+        name="market",
+        tools=[get_commodity_prices, get_crypto_prices, get_fear_greed_index,
+               get_market_news, web_search, save_to_memory, recall_research],
+        tags={"market", "finance", "crypto", "commodities"},
+        description="Financial data: commodity/crypto prices, sentiment, market news.",
     ))

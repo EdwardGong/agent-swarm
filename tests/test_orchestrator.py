@@ -508,7 +508,7 @@ class TestResearchSwarmRegistration:
         reg = AgentRegistry()
         register_agents(reg)
 
-        expected = {"search_agent", "file_agent", "code_agent",
+        expected = {"market_agent", "search_agent", "file_agent", "code_agent",
                     "research_agent", "writer_agent"}
         assert set(reg.names) == expected
 
@@ -528,7 +528,7 @@ class TestResearchSwarmRegistration:
         reg = ToolRegistry()
         register_tools(reg)
 
-        expected = {"search", "files", "shell", "code", "research", "writer"}
+        expected = {"search", "files", "shell", "code", "research", "writer", "market"}
         assert set(reg.names) == expected
 
     def test_toolsets_have_actual_tools(self):
@@ -591,3 +591,133 @@ class TestResearchSwarmRegistration:
 
         graph = build_graph(agent_reg, tool_reg, provider, router, cfg)
         assert graph is not None
+
+
+# ===================================================================
+# Scheduler + sweep config
+# ===================================================================
+
+
+class TestScheduler:
+    def test_load_sweeps(self):
+        from apps.research_swarm.scheduler import load_sweeps
+        sweeps_path = Path(__file__).parent.parent / "apps" / "research_swarm" / "sweeps.yaml"
+        if not sweeps_path.exists():
+            pytest.skip("sweeps.yaml not found")
+
+        jobs = load_sweeps(sweeps_path)
+        assert len(jobs) >= 3
+
+        names = {j.name for j in jobs}
+        assert "crypto-market-pulse" in names
+        assert "commodities-weekly" in names
+        assert "ai-landscape" in names
+
+    def test_sweep_job_fields(self):
+        from apps.research_swarm.scheduler import load_sweeps
+        sweeps_path = Path(__file__).parent.parent / "apps" / "research_swarm" / "sweeps.yaml"
+        if not sweeps_path.exists():
+            pytest.skip("sweeps.yaml not found")
+
+        for job in load_sweeps(sweeps_path):
+            assert job.name, "Sweep missing name"
+            assert job.query, "Sweep missing query"
+            assert job.namespace, "Sweep missing namespace"
+            assert job.schedule in ("hourly", "daily", "weekly") or job.schedule.startswith("every")
+
+    def test_parse_interval_seconds(self):
+        from apps.research_swarm.scheduler import _parse_interval_seconds
+        assert _parse_interval_seconds("hourly") == 3600
+        assert _parse_interval_seconds("daily") == 86400
+        assert _parse_interval_seconds("weekly") == 604800
+        assert _parse_interval_seconds("every 30m") == 1800
+        assert _parse_interval_seconds("every 4h") == 14400
+
+    def test_load_sweeps_from_custom_yaml(self, tmp_path):
+        custom = tmp_path / "test_sweeps.yaml"
+        custom.write_text(
+            "sweeps:\n"
+            "  - name: test-sweep\n"
+            "    query: test query\n"
+            "    schedule: daily\n"
+            "    namespace: test\n"
+            "    enabled: false\n"
+        )
+        from apps.research_swarm.scheduler import load_sweeps
+        jobs = load_sweeps(custom)
+        assert len(jobs) == 1
+        assert jobs[0].name == "test-sweep"
+        assert jobs[0].enabled is False
+
+
+# ===================================================================
+# Market agent integration
+# ===================================================================
+
+
+class TestMarketAgent:
+    def test_market_agent_registered(self):
+        from apps.research_swarm.agents import register_all as register_agents
+        reg = AgentRegistry()
+        register_agents(reg)
+
+        spec = reg.get("market_agent")
+        assert "market" in spec.capabilities
+        assert "crypto" in spec.capabilities
+        assert "commodities" in spec.capabilities
+        assert spec.toolset_names == ["market"]
+        assert spec.system_prompt is not None
+
+    def test_market_toolset_has_financial_tools(self):
+        from apps.research_swarm.tools import register_all as register_tools
+        reg = ToolRegistry()
+        register_tools(reg)
+
+        ts = reg.get("market")
+        tool_names = {t.name for t in ts.tools}
+        assert "get_commodity_prices" in tool_names
+        assert "get_crypto_prices" in tool_names
+        assert "get_fear_greed_index" in tool_names
+        assert "get_market_news" in tool_names
+        # Also includes memory tools for accumulation
+        assert "save_to_memory" in tool_names
+        assert "recall_research" in tool_names
+
+    def test_rule_router_matches_market_keywords(self):
+        from apps.research_swarm.agents import register_all as register_agents
+        reg = AgentRegistry()
+        register_agents(reg)
+
+        router = RuleRouter(reg)
+        state = OrchestratorState(
+            messages=[HumanMessage(content="what is the crypto market doing today")]
+        )
+        result = router.route(state)
+        assert result["next_agent"] == "market_agent"
+
+
+# ===================================================================
+# Namespaced memory
+# ===================================================================
+
+
+class TestNamespacedMemory:
+    def test_default_namespace(self):
+        from apps.research_swarm.memory import DEFAULT_NAMESPACE
+        assert DEFAULT_NAMESPACE == "general"
+
+    def test_get_collection_creates_namespaced_name(self):
+        from apps.research_swarm.memory import _get_collection
+        col = _get_collection("crypto")
+        assert "crypto" in col.name
+
+        col2 = _get_collection("commodities")
+        assert "commodities" in col2.name
+        assert col.name != col2.name
+
+    def test_namespace_isolation(self):
+        """Different namespaces should return different collections."""
+        from apps.research_swarm.memory import _get_collection
+        c1 = _get_collection("ns_test_a")
+        c2 = _get_collection("ns_test_b")
+        assert c1.name != c2.name

@@ -54,7 +54,37 @@ CRITICAL RULES:
 # Agent specs
 # ---------------------------------------------------------------------------
 
+MARKET_SYSTEM = """\
+You are a financial market intelligence agent. Your job is to gather and analyze
+market data across commodities, crypto, and traditional finance.
+
+Workflow:
+1. Use get_commodity_prices or get_crypto_prices to fetch current prices.
+2. Use get_fear_greed_index for crypto sentiment.
+3. Use get_market_news to find recent developments.
+4. Use web_search for deeper context when needed.
+5. Save important findings to memory using save_to_memory with the appropriate
+   namespace (e.g. 'crypto', 'commodities') so they accumulate over time.
+6. Return a clear summary with specific numbers, dates, and trends.
+
+Always include concrete data points — prices, percentages, dates.
+Use the namespace parameter on save_to_memory and recall_research to keep
+different domains (crypto, commodities, etc.) cleanly separated."""
+
+
 AGENTS = [
+    AgentSpec(
+        name="market_agent",
+        description=(
+            "Financial market intelligence — fetches live commodity/crypto prices, "
+            "sentiment indices, and market news. Saves findings to namespaced memory. "
+            "Use for ANY market data, price checks, or financial research."
+        ),
+        capabilities=["market", "finance", "crypto", "commodities", "prices", "trading"],
+        toolset_names=["market"],
+        model_tier="worker_fast",
+        system_prompt=MARKET_SYSTEM,
+    ),
     AgentSpec(
         name="search_agent",
         description="Quick web search and URL fetching for simple lookups.",
