@@ -1,0 +1,20 @@
+# Research Swarm — configuration
+# Loaded by OrchestratorConfig.from_yaml()
+
+routing_strategy: llm
+max_iterations: 10
+
+model_provider: ollama
+
+model_tiers:
+  orchestrator: "qwen2.5:32b"
+  worker: "qwen2.5:14b"
+  worker_fast: "qwen2.5:7b-instruct-q8_0"
+  worker_light: "qwen2.5:3b"
+  worker_micro: "qwen2.5:1.5b"
+  coder: "qwen2.5-coder:32b"
+  reasoner: "qwen2.5:72b-instruct-q4_K_M"
+
+model_options:
+  keep_alive: "5m"
+  temperature: 0.0
