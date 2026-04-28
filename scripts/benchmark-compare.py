@@ -21,10 +21,13 @@ import datetime as dt
 import gc
 import json
 import os
+import random
 import statistics
 import sys
 import time
 from pathlib import Path
+
+DEFAULT_MODEL = "~/models/qwen3.6-35b-opus-abl-mxfp4-mlx"
 
 # Varied prompts across domains/lengths so any per-prompt caching effect
 # (input token cache, kernel cache for fixed input length, etc.) is averaged
@@ -78,6 +81,28 @@ def _disk_size_gb(model_path: str) -> float:
                 except OSError:
                     pass
     return total / (1024 ** 3)
+
+
+def _thermal_prewarm(seconds: int) -> None:
+    """Run sustained GPU matmul to bring the device to a steady-state thermal
+    regime before measured benches. No-op if seconds <= 0.
+    """
+    if seconds <= 0:
+        return
+    import mlx.core as mx
+    print(
+        f"[prewarm] sustaining ~{seconds}s of GPU matmul to settle thermal state",
+        flush=True,
+    )
+    a = mx.random.normal((4096, 4096))
+    b = mx.random.normal((4096, 4096))
+    deadline = time.perf_counter() + seconds
+    iters = 0
+    while time.perf_counter() < deadline:
+        c = a @ b
+        mx.eval(c)
+        iters += 1
+    print(f"[prewarm] done ({iters} matmul iters)", flush=True)
 
 
 def _free_memory():
@@ -262,10 +287,13 @@ def _bench_one(
 
     timestamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     output_dir.mkdir(parents=True, exist_ok=True)
-    base = output_dir / f"{model_name}-{timestamp}"
-    base.with_suffix(".json").write_text(json.dumps(summary, indent=2))
-    base.with_suffix(".txt").write_text(last_text)
-    summary["json_path"] = str(base.with_suffix(".json").relative_to(REPO_ROOT))
+    # String concat: Path.with_suffix mangles names with dots (e.g. "qwen3.6").
+    base_stem = str(output_dir / f"{model_name}-{timestamp}")
+    json_path = Path(base_stem + ".json")
+    txt_path = Path(base_stem + ".txt")
+    json_path.write_text(json.dumps(summary, indent=2))
+    txt_path.write_text(last_text)
+    summary["json_path"] = str(json_path.relative_to(REPO_ROOT))
 
     # Drop refs before next model
     del model, proc
@@ -382,6 +410,28 @@ def main():
         default=None,
         help="Stem for the comparison report file (default: timestamped)",
     )
+    parser.add_argument(
+        "--shuffle",
+        dest="shuffle",
+        action="store_true",
+        default=True,
+        help="Shuffle model load order to mitigate thermal/state ordering bias "
+             "(default: on for multi-model runs).",
+    )
+    parser.add_argument(
+        "--no-shuffle", dest="shuffle", action="store_false",
+        help="Disable shuffle; load models in argument order.",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None,
+        help="PRNG seed for shuffle ordering (default: time-based, non-reproducible).",
+    )
+    parser.add_argument(
+        "--prewarm-seconds", type=int, default=0,
+        help="Run sustained GPU matmul for N seconds before the first model to "
+             "bring the device to thermal steady-state. Default 0 (off). "
+             "Only effective for multi-model runs.",
+    )
     args = parser.parse_args()
 
     paths: list[str] = list(args.model_paths)
@@ -391,7 +441,25 @@ def main():
             if line and not line.startswith("#"):
                 paths.append(line)
     if not paths:
-        parser.error("provide at least one model path or --models-from")
+        paths = [DEFAULT_MODEL]
+        print(f"[info] no models specified; defaulting to {DEFAULT_MODEL}", flush=True)
+
+    is_multi = len(paths) > 1
+    if is_multi and args.shuffle:
+        rng = random.Random(args.seed)
+        rng.shuffle(paths)
+        print(
+            f"[shuffle] order (seed={args.seed!r}): "
+            + ", ".join(os.path.basename(p) for p in paths),
+            flush=True,
+        )
+    if is_multi and args.prewarm_seconds > 0:
+        _thermal_prewarm(args.prewarm_seconds)
+    elif not is_multi and args.prewarm_seconds > 0:
+        print(
+            "[warn] --prewarm-seconds ignored for single-model runs",
+            file=sys.stderr,
+        )
 
     prompts: list[str] = list(args.prompt) if args.prompt else []
     if args.prompts_from:
