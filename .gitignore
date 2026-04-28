@@ -10,3 +10,6 @@ build/
 .idea/
 *.iml
 .env.nakama
+
+# Generated benchmark outputs (timestamped per-model artifacts and report files).
+reports/benchmarks/
