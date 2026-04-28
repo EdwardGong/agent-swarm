@@ -1,0 +1,241 @@
+{
+  "settings": {
+    "timestamp": "20260428-005845",
+    "max_tokens": 1024,
+    "runs": 3,
+    "thinking": false,
+    "prompts": [
+      "Design a distributed message queue system with partitioning, replication, and exactly-once delivery.",
+      "Explain the differences between cooperative and preemptive multitasking, with examples from real operating systems.",
+      "Write a step-by-step plan to migrate a monolithic Postgres database to a sharded architecture without downtime.",
+      "Describe how Raft achieves consensus and what failure modes it handles versus Paxos.",
+      "Compare HNSW, IVF, and ScaNN as vector indexing strategies for billion-scale similarity search."
+    ]
+  },
+  "results": [
+    {
+      "model": "qwen3.6-27b-4bit-mlx",
+      "model_path": "/Users/edward/models/qwen3.6-27b-4bit-mlx",
+      "backend": "mlx_vlm",
+      "load_seconds": 11.348608334024902,
+      "max_tokens": 1024,
+      "thinking": false,
+      "prompts": [
+        "Design a distributed message queue system with partitioning, replication, and exactly-once delivery.",
+        "Explain the differences between cooperative and preemptive multitasking, with examples from real operating systems.",
+        "Write a step-by-step plan to migrate a monolithic Postgres database to a sharded architecture without downtime.",
+        "Describe how Raft achieves consensus and what failure modes it handles versus Paxos.",
+        "Compare HNSW, IVF, and ScaNN as vector indexing strategies for billion-scale similarity search."
+      ],
+      "runs": [
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 104.72169784912168,
+          "generation_tps": 19.82450580500631,
+          "peak_memory_gb": 16.373215956,
+          "prompt_index": 0
+        },
+        {
+          "prompt_tokens": 31,
+          "generation_tokens": 1024,
+          "total_tokens": 1055,
+          "prompt_tps": 118.93489990174415,
+          "generation_tps": 18.908303419991004,
+          "peak_memory_gb": 16.373296436,
+          "prompt_index": 1
+        },
+        {
+          "prompt_tokens": 34,
+          "generation_tokens": 1024,
+          "total_tokens": 1058,
+          "prompt_tps": 63.31897589818386,
+          "generation_tps": 17.126241964294465,
+          "peak_memory_gb": 16.373296436,
+          "prompt_index": 2
+        }
+      ],
+      "generation_tps_mean": 18.619683729763924,
+      "generation_tps_median": 18.908303419991004,
+      "generation_tps_min": 17.126241964294465,
+      "generation_tps_max": 19.82450580500631,
+      "generation_tps_stdev": 1.3720907159198115,
+      "generation_tps_cv": 0.07369033415570309,
+      "prompt_tps_mean": 95.65852454968324,
+      "ttft_seconds_mean": 0.36136140233914676,
+      "wall_seconds_mean": 55.20020930567019,
+      "peak_memory_gb_max": 16.373296436,
+      "on_disk_size_gb": 14.95169684290886,
+      "json_path": "reports/benchmarks/qwen3.json"
+    },
+    {
+      "model": "qwen3.6-27b-abl-4.5bit-msq-mlx",
+      "model_path": "/Users/edward/models/qwen3.6-27b-abl-4.5bit-msq-mlx",
+      "backend": "mlx_vlm",
+      "load_seconds": 5.0954570840112865,
+      "max_tokens": 1024,
+      "thinking": false,
+      "prompts": [
+        "Design a distributed message queue system with partitioning, replication, and exactly-once delivery.",
+        "Explain the differences between cooperative and preemptive multitasking, with examples from real operating systems.",
+        "Write a step-by-step plan to migrate a monolithic Postgres database to a sharded architecture without downtime.",
+        "Describe how Raft achieves consensus and what failure modes it handles versus Paxos.",
+        "Compare HNSW, IVF, and ScaNN as vector indexing strategies for billion-scale similarity search."
+      ],
+      "runs": [
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 97.27200657704869,
+          "generation_tps": 17.95069810953026,
+          "peak_memory_gb": 17.263489844,
+          "prompt_index": 0
+        },
+        {
+          "prompt_tokens": 31,
+          "generation_tokens": 1024,
+          "total_tokens": 1055,
+          "prompt_tps": 99.7262219296914,
+          "generation_tps": 18.27864410910676,
+          "peak_memory_gb": 17.26358802,
+          "prompt_index": 1
+        },
+        {
+          "prompt_tokens": 34,
+          "generation_tokens": 1024,
+          "total_tokens": 1058,
+          "prompt_tps": 71.61760203062377,
+          "generation_tps": 18.48377068059294,
+          "peak_memory_gb": 17.26358802,
+          "prompt_index": 2
+        }
+      ],
+      "generation_tps_mean": 18.23770429974332,
+      "generation_tps_median": 18.27864410910676,
+      "generation_tps_min": 17.95069810953026,
+      "generation_tps_max": 18.48377068059294,
+      "generation_tps_stdev": 0.26888406888077204,
+      "generation_tps_cv": 0.014743306748566833,
+      "prompt_tps_mean": 89.53861017912129,
+      "ttft_seconds_mean": 0.36466938898471807,
+      "wall_seconds_mean": 56.15558249967095,
+      "peak_memory_gb_max": 17.26358802,
+      "on_disk_size_gb": 15.779230445623398,
+      "json_path": "reports/benchmarks/qwen3.6-27b-abl-4.json"
+    },
+    {
+      "model": "qwen3.6-35b-optiq-4bit-mlx",
+      "model_path": "/Users/edward/models/qwen3.6-35b-optiq-4bit-mlx",
+      "backend": "mlx_lm",
+      "load_seconds": 6.654357541992795,
+      "max_tokens": 1024,
+      "thinking": false,
+      "prompts": [
+        "Design a distributed message queue system with partitioning, replication, and exactly-once delivery.",
+        "Explain the differences between cooperative and preemptive multitasking, with examples from real operating systems.",
+        "Write a step-by-step plan to migrate a monolithic Postgres database to a sharded architecture without downtime.",
+        "Describe how Raft achieves consensus and what failure modes it handles versus Paxos.",
+        "Compare HNSW, IVF, and ScaNN as vector indexing strategies for billion-scale similarity search."
+      ],
+      "runs": [
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 374.64623566832483,
+          "generation_tps": 69.77847568652754,
+          "peak_memory_gb": 21.293927374,
+          "prompt_index": 0
+        },
+        {
+          "prompt_tokens": 31,
+          "generation_tokens": 1024,
+          "total_tokens": 1055,
+          "prompt_tps": 369.8644028661255,
+          "generation_tps": 71.2932221762429,
+          "peak_memory_gb": 21.293927374,
+          "prompt_index": 1
+        },
+        {
+          "prompt_tokens": 34,
+          "generation_tokens": 1024,
+          "total_tokens": 1058,
+          "prompt_tps": 371.2077430005106,
+          "generation_tps": 70.74111563237433,
+          "peak_memory_gb": 21.293927374,
+          "prompt_index": 2
+        }
+      ],
+      "generation_tps_mean": 70.60427116504826,
+      "generation_tps_median": 70.74111563237433,
+      "generation_tps_min": 69.77847568652754,
+      "generation_tps_max": 71.2932221762429,
+      "generation_tps_stdev": 0.7665892239032397,
+      "generation_tps_cv": 0.010857547443712298,
+      "prompt_tps_mean": 371.9061271783203,
+      "ttft_seconds_mean": 0.08516098600618231,
+      "wall_seconds_mean": 14.504515041665096,
+      "peak_memory_gb_max": 21.293927374,
+      "on_disk_size_gb": 19.67373490333557,
+      "json_path": "reports/benchmarks/qwen3.json"
+    },
+    {
+      "model": "qwen3.6-35b-opus-abl-mxfp4-mlx",
+      "model_path": "/Users/edward/models/qwen3.6-35b-opus-abl-mxfp4-mlx",
+      "backend": "mlx_lm",
+      "load_seconds": 4.767861125001218,
+      "max_tokens": 1024,
+      "thinking": false,
+      "prompts": [
+        "Design a distributed message queue system with partitioning, replication, and exactly-once delivery.",
+        "Explain the differences between cooperative and preemptive multitasking, with examples from real operating systems.",
+        "Write a step-by-step plan to migrate a monolithic Postgres database to a sharded architecture without downtime.",
+        "Describe how Raft achieves consensus and what failure modes it handles versus Paxos.",
+        "Compare HNSW, IVF, and ScaNN as vector indexing strategies for billion-scale similarity search."
+      ],
+      "runs": [
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 401.14973793197487,
+          "generation_tps": 86.90010541746058,
+          "peak_memory_gb": 21.293927374,
+          "prompt_index": 0
+        },
+        {
+          "prompt_tokens": 31,
+          "generation_tokens": 911,
+          "total_tokens": 942,
+          "prompt_tps": 417.69476289541296,
+          "generation_tps": 87.77967737510279,
+          "peak_memory_gb": 21.293927374,
+          "prompt_index": 1
+        },
+        {
+          "prompt_tokens": 34,
+          "generation_tokens": 1024,
+          "total_tokens": 1058,
+          "prompt_tps": 383.336151924876,
+          "generation_tps": 88.21877399679438,
+          "peak_memory_gb": 21.293927374,
+          "prompt_index": 2
+        }
+      ],
+      "generation_tps_mean": 87.63285226311926,
+      "generation_tps_median": 87.77967737510279,
+      "generation_tps_min": 86.90010541746058,
+      "generation_tps_max": 88.21877399679438,
+      "generation_tps_stdev": 0.6714833696096218,
+      "generation_tps_cv": 0.007662461648440708,
+      "prompt_tps_mean": 400.7268842507546,
+      "ttft_seconds_mean": 0.07923230566666462,
+      "wall_seconds_mean": 11.256469361658674,
+      "peak_memory_gb_max": 21.293927374,
+      "on_disk_size_gb": 17.160864114761353,
+      "json_path": "reports/benchmarks/qwen3.json"
+    }
+  ]
+}

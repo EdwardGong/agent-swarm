@@ -48,7 +48,8 @@ sweep scheduler for recurring intelligence gathering.
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Make sure Ollama is running
+# 2. Make sure Ollama is running with optimized settings
+#    (see RESOURCE_OPTIMIZATION.md for full setup)
 ollama serve &
 
 # 3. Run the research swarm
@@ -59,7 +60,14 @@ python -m apps.research_swarm.main --interactive
 
 # 5. Deep research mode (multi-step research → report)
 python -m apps.research_swarm.main --research "Topic to investigate"
+
+# 6. Run at background priority (recommended for long tasks)
+taskpolicy -b python -m apps.research_swarm.scheduler
 ```
+
+> **Apple Silicon users**: see [RESOURCE_OPTIMIZATION.md](RESOURCE_OPTIMIZATION.md)
+> for memory budgeting, model tier tuning, and operational tooling that
+> yields up to 70% faster inference.
 
 ## Agents
 
@@ -185,3 +193,28 @@ agent-swarm/
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed design documentation.
+
+See [RESOURCE_OPTIMIZATION.md](RESOURCE_OPTIMIZATION.md) for Apple Silicon
+performance tuning, memory budgeting, and operational tooling.
+
+## Nakama P0 Local Deployment
+
+Use the local Nakama stack for the `studio_ops` integration baseline.
+
+```bash
+cp .env.nakama.example .env.nakama
+./scripts/nakama-up.sh
+./scripts/nakama-verify.sh
+```
+
+Optional explicit migration run:
+
+```bash
+./scripts/nakama-migrate.sh
+```
+
+Default local endpoints:
+
+- HTTP API: `http://localhost:7350`
+- gRPC: `localhost:7349`
+- Console: `http://localhost:7351`

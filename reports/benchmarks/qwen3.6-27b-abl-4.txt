@@ -1,0 +1,73 @@
+Migrating a monolithic PostgreSQL database to a sharded architecture without downtime is a complex engineering challenge. The goal is to maintain read/write availability throughout the process while ensuring data consistency.
+
+Here is a comprehensive, step-by-step plan to achieve this.
+
+### Phase 1: Assessment & Design
+
+**1. Identify the Shard Key**
+*   **Action:** Analyze your data access patterns. Choose a column that distributes data evenly and is present in most queries (e.g., `user_id`, `tenant_id`, or `region`).
+*   **Why:** The shard key determines how data is split. Poor choice leads to "hot shards" or cross-shard joins.
+*   **Output:** Define the shard key and the number of shards (e.g., 4, 8, 16).
+
+**2. Choose a Sharding Strategy**
+*   **Options:**
+    *   **Application-Level Sharding:** The app logic routes queries to specific shards based on the shard key. (Most common for new architectures).
+    *   **Proxy-Level Sharding:** Use a proxy like **PgBouncer**, **Pgpool-II**, or **Citus** (PostgreSQL extension) to handle routing.
+*   **Recommendation:** For a smooth migration, consider using **Citus** or a middleware proxy initially, as they can handle routing logic without immediate code changes.
+
+**3. Design the New Schema**
+*   **Action:** Create the schema for the sharded tables. Ensure all tables that need to be co-located (to avoid cross-shard joins) share the same shard key.
+*   **Output:** DDL scripts for the new sharded tables.
+
+---
+
+### Phase 2: Infrastructure Setup
+
+**4. Provision Shard Nodes**
+*   **Action:** Set up the new PostgreSQL instances (shards) on separate servers or containers.
+*   **Why:** Isolate resources to prevent the migration process from impacting the production monolith.
+
+**5. Set Up a Coordination Layer (Optional but Recommended)**
+*   **Action:** If using Citus, install the Citus coordinator node. If using application-level sharding, ensure your connection pooler/proxy is configured.
+*   **Output:** A new database endpoint that applications can connect to.
+
+---
+
+### Phase 3: Data Migration Strategy (The Core)
+
+**6. Implement Dual-Write (Write-Through)**
+*   **Action:** Modify the application code to write to **both** the monolithic database and the new sharded database simultaneously.
+*   **How:**
+    *   Use a database trigger, CDC (Change Data Capture) tool like **Debezium**, or application-level logic.
+    *   **Recommendation:** Use **Debezium** with Kafka to capture changes from the monolith and replicate them to the shards. This is less invasive than dual-write in code.
+*   **Why:** Ensures the sharded database stays in sync with the monolith during the transition.
+
+**7. Backfill Historical Data**
+*   **Action:** Run a batch job to copy existing data from the monolith to the sharded database.
+*   **How:**
+    *   Use `pg_dump`/`pg_restore` or a custom ETL script.
+    *   Partition the data by shard key and load it into the respective shards.
+    *   **Critical:** Ensure this process does not lock the monolith. Use logical replication or read-only snapshots if possible.
+*   **Output:** The sharded database now contains all historical data.
+
+**8. Resolve Conflicts & Sync Lag**
+*   **Action:** Monitor the lag between the monolith and the shards.
+*   **How:**
+    *   If using CDC (Debezium), ensure the Kafka consumer is catching up.
+    *   If using dual-write, ensure idempotency (writing the same record twice doesn’t cause errors).
+*   **Output:** The sharded database is nearly real-time with the monolith.
+
+---
+
+### Phase 4: Read Migration
+
+**9. Redirect Reads to Shards (Canary Release)**
+*   **Action:** Start routing a small percentage of read traffic (e.g., 1%) to the sharded database.
+*   **How:**
+    *   Use a feature flag in the application to route reads to the new shard endpoint.
+    *   Compare results from the monolith and shards for consistency.
+*   **Why:** Validates that the sharded database is serving correct data without impacting users.
+
+**10. Gradually Increase Read Traffic**
+*   **Action:** Incrementally increase the percentage of reads going to shards (1% → 10% → 50% → 100%).
+*   **Monitoring:** Watch for latency spikes, query errors, or

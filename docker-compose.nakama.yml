@@ -1,0 +1,51 @@
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: nakama-postgres
+    restart: unless-stopped
+    env_file:
+      - .env.nakama
+    environment:
+      POSTGRES_DB: ${NAKAMA_DB_NAME}
+      POSTGRES_USER: ${NAKAMA_DB_USER}
+      POSTGRES_PASSWORD: ${NAKAMA_DB_PASSWORD}
+    ports:
+      - "${NAKAMA_POSTGRES_PORT}:5432"
+    volumes:
+      - nakama_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${NAKAMA_DB_USER} -d ${NAKAMA_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  nakama:
+    image: heroiclabs/nakama:3.38.0
+    container_name: nakama
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env.nakama
+    command:
+      - "/bin/sh"
+      - "-ec"
+      - >
+        /nakama/nakama migrate up
+        --database.address ${NAKAMA_DB_USER}:${NAKAMA_DB_PASSWORD}@postgres:5432/${NAKAMA_DB_NAME}?sslmode=disable
+        &&
+        exec /nakama/nakama
+        --config /nakama/data/local.yml
+        --database.address ${NAKAMA_DB_USER}:${NAKAMA_DB_PASSWORD}@postgres:5432/${NAKAMA_DB_NAME}?sslmode=disable
+    ports:
+      - "${NAKAMA_HTTP_PORT}:7350"
+      - "${NAKAMA_GRPC_PORT}:7349"
+      - "${NAKAMA_CONSOLE_PORT}:7351"
+    volumes:
+      - ./configs/nakama/local.yml:/nakama/data/local.yml:ro
+
+volumes:
+  nakama_postgres_data:
+

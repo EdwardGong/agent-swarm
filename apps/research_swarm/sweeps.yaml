@@ -42,3 +42,11 @@ sweeps:
     namespace: ai
     report_dir: ~/workspace/ai/agent-swarm/reports/ai
     enabled: true
+
+  - name: gaming-studios
+    query: >
+      Deep research on state of the art mobile gaming studios in 2025/2026 (like Supercell, Voodoo, Scopely, and other hybrid-casual leaders). Focus on: 1) Core game loops and player retention mechanics for idle/tycoon and hybrid-casual games. 2) Monetization strategies (rewarded ads vs IAPs vs subscriptions). 3) High-level technical architectures, rapid shipping, and team structures. Save findings to the gaming namespace and produce a deep research report detailing how to build a highly profitable game using these principles.
+    schedule: "daily"
+    namespace: gaming_2026
+    report_dir: ~/workspace/ai/agent-swarm/reports/gaming_2026
+    enabled: true

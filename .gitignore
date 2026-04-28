@@ -6,3 +6,7 @@ __pycache__/
 dist/
 build/
 .venv/
+.cursor/
+.idea/
+*.iml
+.env.nakama

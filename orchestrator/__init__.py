@@ -3,7 +3,7 @@
 from orchestrator.agent import AgentSpec, AgentRegistry
 from orchestrator.config import OrchestratorConfig
 from orchestrator.graph import build_graph
-from orchestrator.models import ModelProvider, OllamaProvider
+from orchestrator.models import ModelProvider, OllamaProvider, LlamaCppProvider
 from orchestrator.router import Router, LLMRouter, RuleRouter
 from orchestrator.state import OrchestratorState
 from orchestrator.tools import ToolSet, ToolRegistry
@@ -15,6 +15,7 @@ __all__ = [
     "build_graph",
     "ModelProvider",
     "OllamaProvider",
+    "LlamaCppProvider",
     "Router",
     "LLMRouter",
     "RuleRouter",

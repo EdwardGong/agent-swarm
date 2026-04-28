@@ -1,0 +1,32 @@
+# Research Swarm — llama-server (direct llama.cpp) configuration
+#
+# Bypasses Ollama entirely. Requires llama-server running:
+#
+#   llama-server \
+#     -m ~/models/qwen3.6-27b-hauhaucs-balanced/Qwen3.6-27B-Uncensored-HauhauCS-Balanced-Q4_K_P.gguf \
+#     --mmproj ~/models/qwen3.6-27b-hauhaucs-balanced/mmproj-Qwen3.6-27B-Uncensored-HauhauCS-Balanced-f16.gguf \
+#     -ngl 99 -c 8192 -fa on --jinja \
+#     --host 127.0.0.1 --port 8080
+#
+# All tiers point to the same llama-server instance (single model).
+# The model name is arbitrary — llama-server serves whatever it was started with.
+
+routing_strategy: llm
+max_iterations: 10
+
+model_provider: llamacpp
+
+model_tiers:
+  orchestrator: "local"
+  reasoner: "local"
+  coder: "local"
+  worker: "local"
+  worker_fast: "local"
+  worker_light: "local"
+  worker_micro: "local"
+
+model_options:
+  temperature: 0.6
+
+extra:
+  llamacpp_base_url: "http://127.0.0.1:8080/v1"

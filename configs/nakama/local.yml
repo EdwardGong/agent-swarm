@@ -1,0 +1,15 @@
+name: nakama1
+database:
+  address:
+    - postgres:localdb@postgres:5432/nakama?sslmode=disable
+socket:
+  server_key: dev_server_key_change_me
+session:
+  encryption_key: dev_encryption_key_change_me_32_chars
+  refresh_encryption_key: dev_refresh_key_change_me_32_chars
+console:
+  username: admin
+  password: password
+runtime:
+  path: /nakama/data/modules
+

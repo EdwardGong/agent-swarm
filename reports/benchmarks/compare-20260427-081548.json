@@ -1,0 +1,125 @@
+{
+  "settings": {
+    "timestamp": "20260427-081548",
+    "max_tokens": 1024,
+    "runs": 5,
+    "thinking": false,
+    "prompt": "Design a distributed message queue system with partitioning, replication, and exactly-once delivery."
+  },
+  "results": [
+    {
+      "model": "qwen3.6-35b-opus-abl-mxfp4-vlm-mlx",
+      "model_path": "/Users/edward/models/qwen3.6-35b-opus-abl-mxfp4-vlm-mlx",
+      "load_seconds": 6.13633883401053,
+      "max_tokens": 1024,
+      "thinking": false,
+      "prompt": "Design a distributed message queue system with partitioning, replication, and exactly-once delivery.",
+      "runs": [
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 284.5921794323953,
+          "generation_tps": 67.42630398387597,
+          "peak_memory_gb": 19.498098336
+        },
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 304.1264916910589,
+          "generation_tps": 67.20642611713811,
+          "peak_memory_gb": 19.498600516
+        },
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 332.3679263588356,
+          "generation_tps": 67.79474911306365,
+          "peak_memory_gb": 19.498622464
+        },
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 328.8710429734524,
+          "generation_tps": 68.23395454914215,
+          "peak_memory_gb": 19.498622464
+        },
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 348.35366610840293,
+          "generation_tps": 67.95658511343348,
+          "peak_memory_gb": 19.498622464
+        }
+      ],
+      "generation_tps_mean": 67.72360377533067,
+      "generation_tps_min": 67.20642611713811,
+      "generation_tps_max": 68.23395454914215,
+      "generation_tps_stdev": 0.41099263115287316,
+      "prompt_tps_mean": 319.662261312829,
+      "peak_memory_gb_max": 19.498622464,
+      "json_path": "reports/benchmarks/qwen3.json"
+    },
+    {
+      "model": "qwen3.6-35b-mxfp4-mlx",
+      "model_path": "/Users/edward/models/qwen3.6-35b-mxfp4-mlx",
+      "load_seconds": 5.175655541999731,
+      "max_tokens": 1024,
+      "thinking": false,
+      "prompt": "Design a distributed message queue system with partitioning, replication, and exactly-once delivery.",
+      "runs": [
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 419.90219384227737,
+          "generation_tps": 67.23862543703228,
+          "peak_memory_gb": 19.498622464
+        },
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 262.9960207340242,
+          "generation_tps": 66.98658228974332,
+          "peak_memory_gb": 19.498622464
+        },
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 270.130843815565,
+          "generation_tps": 67.42098021327149,
+          "peak_memory_gb": 19.498622464
+        },
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 439.36409382086407,
+          "generation_tps": 67.47260037229172,
+          "peak_memory_gb": 19.498622464
+        },
+        {
+          "prompt_tokens": 30,
+          "generation_tokens": 1024,
+          "total_tokens": 1054,
+          "prompt_tps": 274.539545739142,
+          "generation_tps": 68.0364752675969,
+          "peak_memory_gb": 19.498622464
+        }
+      ],
+      "generation_tps_mean": 67.43105271598714,
+      "generation_tps_min": 66.98658228974332,
+      "generation_tps_max": 68.0364752675969,
+      "generation_tps_stdev": 0.3882480993335191,
+      "prompt_tps_mean": 333.3865395903746,
+      "peak_memory_gb_max": 19.498622464,
+      "json_path": "reports/benchmarks/qwen3.json"
+    }
+  ]
+}

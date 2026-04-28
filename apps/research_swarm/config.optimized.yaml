@@ -1,0 +1,33 @@
+# Research Swarm — optimized configuration for Apple Silicon (48 GB)
+#
+# This config replaces dense 32B/72B models with a single MoE model
+# (qwen3:30b-a3b) that provides equivalent quality at 70% faster
+# generation speed.  See RESOURCE_OPTIMIZATION.md for benchmarks.
+#
+# To use:  cp config.optimized.yaml config.yaml
+# Or:      OrchestratorConfig.from_yaml("apps/research_swarm/config.optimized.yaml")
+
+routing_strategy: llm
+max_iterations: 10
+
+model_provider: ollama
+
+model_tiers:
+  # MoE model — 30B params, ~3B active per token.  73 tok/s on M3 Max.
+  # Shared across orchestrator/coder/reasoner to avoid loading duplicates.
+  orchestrator: "qwen3:30b-a3b"
+  reasoner: "qwen3:30b-a3b"
+  coder: "qwen3:30b-a3b"
+
+  # Dense workers — smaller models kept warm alongside the MoE.
+  worker: "qwen2.5:7b-instruct-q8_0"
+  worker_fast: "qwen2.5:7b-instruct-q8_0"
+  worker_light: "qwen2.5:1.5b"
+  worker_micro: "qwen2.5:0.5b"
+
+model_options:
+  keep_alive: "10m"
+  temperature: 0.0
+  # Limit MoE context to prevent CPU spillover on 48 GB.
+  # Remove this if you have 64 GB+ unified memory.
+  num_ctx: 8192
