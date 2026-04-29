@@ -328,6 +328,17 @@ Documented as `Open TODO` below.
   path. The launcher sets it to `opus-mxfp4`.
 - **Continuous batching is opt-in** in this build (must pass
   `--continuous-batching`); the older static-batching path is the default.
+- **Restart between repeat bench sweeps**. Memory accumulates across
+  consecutive client runs against a long-lived server (paged-cache pool
+  growth, prefix-cache fill, possibly Metal allocator fragmentation).
+  Observed Apr 29 2026: a 512-token sweep run twice in a row hit a
+  failure at C=32 on the second attempt and OOMed at C=32 on the third;
+  a fresh server restart cleared it and the sweep completed cleanly.
+  Operational guidance: restart `scripts/run-vllm-mlx-server.sh` between
+  back-to-back full sweeps when chasing apples-to-apples numbers,
+  especially at higher max_tokens. The cleaner long-term fix is
+  upstream — exposing a `/reset_cache` admin endpoint or an opt-in
+  per-request `evict_after` flag — but neither exists in v0.2.9.
 - **Prometheus endpoint** at `/metrics` when `--enable-metrics` is set.
   Worth adding the Prometheus + Grafana stack for the swarm production
   story; for now `bench-serve --scrape-metrics` and our client's snapshot
@@ -360,9 +371,10 @@ Raw JSON is split by `max_tokens`:
   A/B.
 - `512-tokens/mlx-lm-baseline.json` — in-process B=1..32, max_tokens=512
   (added Apr 29 2026).
-- `512-tokens/vllm-mlx-baseline.json` — missing; the previous
-  C-up-to-64 server run was dropped during the directory reorg and
-  needs re-collection to complete the 512-token pairing.
+- `512-tokens/vllm-mlx-baseline.json` — server C=1..32 with
+  `--use-paged-cache` at max_tokens=512 (re-collected Apr 29 2026 after
+  the directory reorg). Operator note: this run required a fresh server
+  restart — see “Restart between repeat bench sweeps” above.
 - **Cache backend matters a lot**. Switching the server from
   `memory_aware_cache` to `paged_cache` (v1 → v2) lifted aggregate
   decode tok/s by 9–19% across C=1..32 with 10–46% lower mean TTFT.
@@ -384,15 +396,13 @@ Raw JSON is split by `max_tokens`:
 - **max_tokens scaling (in-process)**: aggregate decode tok/s is
   essentially flat between max_tokens=256 and 512 across B=2..32 (≤3%
   drift; B=1 is N=1 noise). Peak Metal climbs only 22.9 GB → 23.2 GB
-  at B=32. Implication for the server pairing: when the 512-token
-  vllm-mlx run is re-collected, expect throughput at 512 to track 256
-  closely, with memory budget being the C=64 collapse axis.
+  at B=32. The 512-token server pairing has been re-collected
+  (`512-tokens/vllm-mlx-baseline.json`).
 - **Headroom**: v2 reports `cache_utilization_ratio = 0.178` at C=32 —
   the paged pool is barely populated, so concurrency can rise well
   past 32 before memory becomes the bottleneck. A previous 512-token
   server run at C=64 collapsed to 9.7 tok/s aggregate, flagging a knee
-  somewhere between C=32 and C=64 worth bisecting (file dropped during
-  the reorg; needs re-collection).
+  somewhere between C=32 and C=64 worth bisecting separately.
 - **Stale fix history**: an earlier installation against the v0.2.9
   PyPI wheel hit 100% request failure with the stream-binding error.
   The fix shipped on master post-v0.2.9. If the launcher starts
@@ -415,12 +425,10 @@ Raw JSON is split by `max_tokens`:
 - Sweep `--max-num-seqs` ∈ {32, 48, 64} at max_tokens=256 to locate the
   new throughput knee (cache utilization is only 17.8% at C=32 with paged
   cache; lots of room to grow).
-- Re-collect the server-side 512-token sweep (the previous file was
-  dropped during the reorg) into
-  `reports/benchmarks/qwen3.6-35b-parallel/512-tokens/vllm-mlx-baseline.json`
-  to complete the 512-token in-proc-vs-server pairing. The in-proc
-  reference is already in place
-  (`512-tokens/mlx-lm-baseline.json`).
+- ~~Re-collect the server-side 512-token sweep into
+  `reports/benchmarks/qwen3.6-35b-parallel/512-tokens/vllm-mlx-baseline.json`.~~
+  **DONE** (Apr 29 2026); paired in-proc reference also in place at
+  `512-tokens/mlx-lm-baseline.json`.
 - Bisect the C=64 collapse seen at max_tokens=512 — likely paged-cache
   exhaustion or scheduler thrash; re-run with a higher
   `--max-cache-blocks` and explicit `--max-num-seqs 64`.
