@@ -27,6 +27,10 @@ import sys
 import time
 from pathlib import Path
 
+# Make sibling helper module importable when run as a script.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _bench_lib import display_path  # noqa: E402
+
 DEFAULT_MODEL = "~/models/qwen3.6-35b-opus-abl-mxfp4-mlx"
 
 # Varied prompts across domains/lengths so any per-prompt caching effect
@@ -289,11 +293,11 @@ def _bench_one(
     output_dir.mkdir(parents=True, exist_ok=True)
     # String concat: Path.with_suffix mangles names with dots (e.g. "qwen3.6").
     base_stem = str(output_dir / f"{model_name}-{timestamp}")
-    json_path = Path(base_stem + ".json")
-    txt_path = Path(base_stem + ".txt")
+    json_path = Path(base_stem + ".json").resolve()
+    txt_path = Path(base_stem + ".txt").resolve()
     json_path.write_text(json.dumps(summary, indent=2))
     txt_path.write_text(last_text)
-    summary["json_path"] = str(json_path.relative_to(REPO_ROOT))
+    summary["json_path"] = str(display_path(json_path, REPO_ROOT))
 
     # Drop refs before next model
     del model, proc
@@ -498,15 +502,15 @@ def main():
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     stem = args.report_name or f"compare-{timestamp}"
-    md_path = args.output_dir / f"{stem}.md"
-    json_path = args.output_dir / f"{stem}.json"
+    md_path = (args.output_dir / f"{stem}.md").resolve()
+    json_path = (args.output_dir / f"{stem}.json").resolve()
     md_path.write_text(_format_markdown(summaries, settings))
     json_path.write_text(json.dumps({"settings": settings, "results": summaries}, indent=2))
 
     print("\n" + _format_table(summaries))
     print(
-        f"\n[done] report={md_path.relative_to(REPO_ROOT)} "
-        f"json={json_path.relative_to(REPO_ROOT)}"
+        f"\n[done] report={display_path(md_path, REPO_ROOT)} "
+        f"json={display_path(json_path, REPO_ROOT)}"
     )
 
 

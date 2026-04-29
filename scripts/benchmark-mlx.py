@@ -19,6 +19,10 @@ import statistics
 import sys
 from pathlib import Path
 
+# Make sibling helper module importable when run as a script.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _bench_lib import display_path  # noqa: E402
+
 DEFAULT_PROMPT = (
     "Design a distributed message queue system with partitioning, "
     "replication, and exactly-once delivery."
@@ -170,8 +174,8 @@ def run_benchmark(
         "generation_tps_stdev": statistics.stdev(gen_tps) if len(gen_tps) > 1 else 0.0,
     }
 
-    json_path = Path(base_stem + ".json")
-    txt_path = Path(base_stem + ".txt")
+    json_path = Path(base_stem + ".json").resolve()
+    txt_path = Path(base_stem + ".txt").resolve()
     json_path.write_text(json.dumps(summary, indent=2))
     txt_path.write_text(last_text)
 
@@ -180,7 +184,7 @@ def run_benchmark(
         f"(min={summary['generation_tps_min']:.1f}, "
         f"max={summary['generation_tps_max']:.1f}, "
         f"stdev={summary['generation_tps_stdev']:.2f}) | "
-        f"output={json_path.relative_to(REPO_ROOT)}",
+        f"output={display_path(json_path, REPO_ROOT)}",
         flush=True,
     )
 

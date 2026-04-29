@@ -28,7 +28,31 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Union
+
+
+# --- output path display ------------------------------------------------------
+
+def display_path(path: Union[Path, str], root: Path) -> Path:
+    """Return ``path`` formatted for end-of-run display.
+
+    Resolves the input to an absolute path, then returns it relative to
+    ``root`` when possible and the absolute path otherwise. The bench
+    scripts use this so a relative ``--output-dir`` (e.g.
+    ``reports/benchmarks/qwen3.6-35b-parallel/512-tokens``) doesn't crash
+    the success print: ``Path.relative_to`` raises ``ValueError`` when
+    the absolute target is not under ``root`` (which happens whenever
+    ``REPO_ROOT`` is absolute and the input is relative). The JSON has
+    already been written by the time the print fires, so the user-facing
+    behavior of dropping into ``ValueError`` was purely cosmetic but
+    surfaced as exit code 1.
+    """
+    p = Path(path).resolve()
+    try:
+        return p.relative_to(root)
+    except ValueError:
+        return p
 
 
 # --- machine specs ------------------------------------------------------------
@@ -421,4 +445,5 @@ __all__ = [
     "detect_machine_specs",
     "BandwidthSummary",
     "BandwidthSampler",
+    "display_path",
 ]

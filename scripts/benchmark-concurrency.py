@@ -35,7 +35,7 @@ from pathlib import Path
 
 # Make sibling helper module importable when run as a script.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _bench_lib import BandwidthSampler, detect_machine_specs  # noqa: E402
+from _bench_lib import BandwidthSampler, detect_machine_specs, display_path  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL = "~/models/qwen3.6-35b-opus-abl-mxfp4-mlx"
@@ -433,13 +433,7 @@ def main():
     stem = args.report_name or f"concurrency-{timestamp}"
     json_path = (args.output_dir / f"{stem}.json").resolve()
     json_path.write_text(json.dumps(out, indent=2))
-    # Print a repo-relative path when possible; fall back to absolute so a
-    # relative --output-dir doesn't crash the success print.
-    try:
-        display = json_path.relative_to(REPO_ROOT)
-    except ValueError:
-        display = json_path
-    print(f"\n[done] report={display}", flush=True)
+    print(f"\n[done] report={display_path(json_path, REPO_ROOT)}", flush=True)
 
     _free_memory()
 

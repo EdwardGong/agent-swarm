@@ -36,7 +36,7 @@ import httpx
 
 # Make sibling helper module importable when run as a script.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _bench_lib import BandwidthSampler, detect_machine_specs  # noqa: E402
+from _bench_lib import BandwidthSampler, detect_machine_specs, display_path  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "reports" / "benchmarks"
@@ -393,7 +393,7 @@ async def amain():
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     stem = args.report_name or f"vllm-mlx-{timestamp}"
-    json_path = args.output_dir / f"{stem}.json"
+    json_path = (args.output_dir / f"{stem}.json").resolve()
     json_path.write_text(json.dumps({k: v for k, v in out.items() if not k.startswith("_")},
                                     indent=2, default=str))
 
@@ -401,7 +401,7 @@ async def amain():
     if valid:
         print()
         _print_table(valid)
-    print(f"\n[done] report={json_path.relative_to(REPO_ROOT)}", flush=True)
+    print(f"\n[done] report={display_path(json_path, REPO_ROOT)}", flush=True)
 
 
 def main():
