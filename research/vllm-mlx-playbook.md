@@ -6,13 +6,15 @@ this machine. Confidence flags follow each non-obvious claim.
 
 ## TL;DR for the swarm
 - Use `scripts/run-vllm-mlx-server.sh` to serve `qwen3.6-35b-opus-abl-mxfp4-mlx`
-  with continuous batching and Prometheus metrics.
+  with continuous batching, paged KV cache, priority scheduling, and
+  Prometheus metrics enabled.
 - Drive it with our `scripts/benchmark-vllm-mlx-client.py` for apples-to-apples
   comparison against the in-process `mlx_lm.batch_generate` baseline. Use
   `vllm-mlx bench-serve` only for sanity / cross-checks (different prompt set,
   no DRAM bandwidth sampling, different metric shapes).
-- **Priority queue: implemented in code but NOT exposed in v0.2.9.** See
-  "Client prioritization" below for current options and the upstream gap.
+- **Priority queue: enabled by `--scheduling-policy priority` at server
+  startup; per-request priority via OpenAI `extra_body={"priority": N}`
+  where lower = higher priority. Default is 0; FCFS within a priority class.**
 
 ## Built-in benchmarks vs our wrappers
 The CLI ships four bench subcommands:
@@ -128,62 +130,79 @@ From `vllm-mlx serve --help` on v0.2.9. Not exhaustive — only what's relevant.
   `--enable-auto-tool-choice`, `--mcp-config`. Worth a second pass when
   the swarm gets vision / TTS / embeddings tiers.
 
-## Client prioritization — the actual story
-**Goal**: orchestrator agent's calls preempt or jump the queue ahead of
-worker agents' calls.
+## Client prioritization — orchestrator-vs-worker priorities
+**Goal**: orchestrator agent's calls jump the queue ahead of worker
+agents' calls. This works today via two pieces.
 
-### Status in v0.2.9 (verified, HIGH confidence)
+### Server side — `--scheduling-policy priority`
+Launch the server with the priority scheduler instead of the default
+FCFS:
+```bash
+vllm-mlx serve <model> --scheduling-policy priority \
+    --continuous-batching --use-paged-cache --metrics \
+    --served-model-name opus-mxfp4
+```
+Our launcher (`scripts/run-vllm-mlx-server.sh`) already passes this.
+With `priority` selected, queued requests are ordered by `(priority,
+arrival_time)` — lower priority value = scheduled first; ties resolved
+by FCFS.
+
+Underlying mechanics, for reference:
 - `vllm_mlx/request.py:100` — `Request.priority: int = 0  # Lower is higher priority`
-- `vllm_mlx/request.py:181-184` — `Request.__lt__` uses `(priority, arrival_time)`
-  for priority-queue ordering.
-- `vllm_mlx/scheduler.py:45-49` — `class SchedulingPolicy(Enum): FCFS = "fcfs"; PRIORITY = "priority"`.
-- `vllm_mlx/scheduler.py:61` — `SchedulerConfig.policy: SchedulingPolicy = SchedulingPolicy.FCFS` (default FCFS).
+- `vllm_mlx/request.py:181-184` — `Request.__lt__` orders on
+  `(priority, arrival_time)`.
+- `vllm_mlx/scheduler.py:45-49` — `SchedulingPolicy(FCFS|PRIORITY)`.
+- `vllm_mlx/scheduler.py:61` — `SchedulerConfig.policy` defaults to FCFS;
+  `--scheduling-policy priority` flips it.
 
-So the data model and scheduler comparator already exist. **However**:
-- No CLI flag (`vllm-mlx serve --help` shows no `--scheduling-policy`,
-  `--policy`, `--priority`, or similar).
-- No API surface (`grep priority vllm_mlx/api/` returns only an unrelated
-  tool-calling comment). The OpenAI request body has no priority field;
-  HTTP headers aren't read for priority.
+### Client side — OpenAI `extra_body={"priority": N}`
+Both the official `openai` Python SDK and most OpenAI-compatible clients
+forward unrecognized fields placed in `extra_body` straight into the
+request JSON. vllm-mlx reads the `priority` field and threads it onto
+the `Request`:
+```python
+# Orchestrator (high priority — runs first)
+response = client.chat.completions.create(
+    model="opus-mxfp4",
+    messages=[...],
+    extra_body={"priority": -10},   # any negative int; lower = sooner
+)
 
-The priority queue is **plumbed but not user-reachable**. This is a real
-limitation of v0.2.9.
+# Worker agents (default / lower priority)
+response = client.chat.completions.create(
+    model="opus-mxfp4",
+    messages=[...],
+    extra_body={"priority": 0},     # default if omitted
+    # extra_body={"priority": 10}   # even lower than other workers
+)
+```
+Conventions for the swarm:
+- **Orchestrator**: `priority = -10` (well-clear of any worker tier).
+- **Default worker**: `priority = 0` (omit the field).
+- **Background / low-priority worker**: `priority = 10`.
+- Reserve a tier between -10 and 0 (e.g. `-5`) for user-interactive
+  requests if any go through the same model.
 
-### Options (with confidence)
-1. **Wait for upstream** [HIGH confidence in feasibility, MEDIUM in timing].
-   File a feature request on the [waybarrios/vllm-mlx](https://github.com/waybarrios/vllm-mlx)
-   repo asking for either `--scheduling-policy priority` plus an `X-Priority`
-   request header or a `priority` field in the request body. The work is
-   small (existing comparator + a header-reading shim). Track in
-   research/TODOs.
-2. **Two server instances on different ports** [HIGH confidence; safest now].
-   - `:8000` for orchestrator (smaller `--max-num-seqs`, e.g. 4 → low queueing).
-   - `:8001` for workers (larger `--max-num-seqs`, e.g. 24).
-   - Cost: each instance loads a separate copy of weights (~17 GB for
-     opus-mxfp4 → 34 GB total). On 48 GB this leaves ~10 GB headroom — workable
-     but tight; on 128 GB (M5) it's comfortable.
-3. **Monkey-patch at server boot** [MEDIUM confidence; brittle].
-   Wrap `vllm-mlx serve` with a small Python shim that:
-   - Imports `vllm_mlx.scheduler` and overrides `SchedulerConfig.policy =
-     SchedulingPolicy.PRIORITY` before the engine starts.
-   - Subclasses the OpenAI-compatible request handler to read an
-     `X-Request-Priority` header (or a `metadata.priority` field) and pass
-     it through to `Request(priority=...)`.
-   We get a single-instance solution but accept upstream-coupling risk.
-   Worth doing if (1) drags > 1 month and (2) is too memory-tight on M3 Max.
-4. **Application-layer priority via separate queues** [HIGH confidence;
-   no server change]. The orchestrator submits to vllm-mlx directly while
-   workers go through an asyncio.PriorityQueue your client owns. Workers
-   wait for tokens budget to be available. Loses continuous-batching
-   intermixing benefits but works without server modification.
+### Behavior caveats (HIGH confidence)
+- Priority affects **queueing order**, not preemption. A request that's
+  already in the running batch isn't kicked out by a higher-priority
+  arrival; it finishes its decode chunk and the new request joins on the
+  next scheduler step. With continuous batching enabled, that step is on
+  the order of one decode token, so wait amplification is small.
+- Within a single priority class, ordering is FCFS by `arrival_time`.
+- The priority value is an `int`; spread your tiers wide (10-step gaps)
+  to leave room for future categories without renumbering.
 
-### Recommendation
-- **Now (M3 Max 48 GB):** option 4 (client-side queue). Simple and
-  immediately useful.
-- **On M5 Max 128 GB arrival:** option 2 (two instances). Cleanest
-  isolation; orchestrator never blocks on workers.
-- **In parallel:** open the upstream feature request (option 1) so option
-  3 / 4 can be retired later.
+### When to consider alternatives
+- **Two server instances on different ports** is still useful for *hard*
+  isolation (e.g. an orchestrator instance with `--max-num-seqs 4` so it
+  is never head-of-line-blocked by a long worker job, and a workers
+  instance with `--max-num-seqs 24`). Costs ~34 GB of weights on M3 Max
+  48 GB (tight); comfortable on 128 GB. Use this *in addition* to
+  priority within each instance once the M5 box is online.
+- **Client-side asyncio.PriorityQueue** is no longer necessary for
+  fairness, but is still useful as a circuit-breaker (cap concurrent
+  worker submissions so a bug in a worker can't flood the server).
 
 ## Other things worth documenting
 - **Model name in API requests** = `--served-model-name`, not the file
@@ -208,7 +227,6 @@ limitation of v0.2.9.
   to `max_recommended_working_set_size`.
 
 ## Open TODOs
-- File upstream FR for `--scheduling-policy priority` + `X-Priority` header.
 - Verify whether `--moe-top-k` exists in this install (or a flag with a
   similar name) and benchmark its quality impact on Opus-distilled weights.
 - Confirm `--metrics` vs `--enable-metrics` flag spelling on first server
@@ -216,3 +234,6 @@ limitation of v0.2.9.
 - Asymmetric K/V quantization (K8/V4) is not exposed in v0.2.9 — file an FR.
 - Once the comparison run is done, capture a `vllm-mlx vs in-process` diff
   in `reports/benchmarks/` so future agents have ground truth, not lore.
+- Add a small priority-stress test: fire N=24 worker requests at
+  `priority=0` then 4 orchestrator requests at `priority=-10`, verify
+  the orchestrator wall_p95 is well below the worker mean.

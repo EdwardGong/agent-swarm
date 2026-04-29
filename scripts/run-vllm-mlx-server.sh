@@ -21,6 +21,8 @@ echo "[vllm-mlx] serving $MODEL on port $PORT (continuous-batching + metrics)"
 exec vllm-mlx serve "$MODEL" \
   --port "$PORT" \
   --continuous-batching \
+  --use-paged-cache \
+  --scheduling-policy priority \
   --metrics \
   --served-model-name opus-mxfp4 \
   "$@"

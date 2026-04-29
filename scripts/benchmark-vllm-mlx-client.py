@@ -91,8 +91,15 @@ async def _one_request(
     model: str,
     prompt: str,
     max_tokens: int,
+    priority: Optional[int] = None,
 ) -> dict:
     """Drive one OpenAI-style chat-completions streaming request.
+
+    If ``priority`` is given, it is included in the request body as the
+    ``priority`` field (lower = higher priority on a vllm-mlx server
+    started with ``--scheduling-policy priority``). The official OpenAI
+    SDK forwards this via ``extra_body={"priority": N}``; we just put it
+    directly in the JSON.
 
     Returns metrics dict with TTFT, total wall, completion_tokens.
     """
@@ -103,6 +110,8 @@ async def _one_request(
         "stream": True,
         "temperature": 0.0,
     }
+    if priority is not None:
+        payload["priority"] = priority
     t_send = time.perf_counter()
     t_first_token: Optional[float] = None
     n_completion = 0
@@ -163,6 +172,7 @@ async def _one_request(
 async def _run_concurrency(
     base_url: str, model: str, prompts: list[str],
     concurrency: int, max_tokens: int,
+    priority: Optional[int] = None,
 ) -> dict:
     """Fire `concurrency` requests in parallel; return per-window metrics."""
     selected = [prompts[i % len(prompts)] for i in range(concurrency)]
@@ -170,7 +180,7 @@ async def _run_concurrency(
     async with httpx.AsyncClient() as client:
         results = await asyncio.gather(
             *[
-                _one_request(client, base_url, model, p, max_tokens)
+                _one_request(client, base_url, model, p, max_tokens, priority)
                 for p in selected
             ],
             return_exceptions=False,
@@ -265,6 +275,13 @@ async def amain():
         "--no-bandwidth-sampling", dest="bandwidth_sampling", action="store_false",
     )
     parser.add_argument("--bandwidth-interval-ms", type=int, default=1000)
+    parser.add_argument(
+        "--priority", type=int, default=None,
+        help="Per-request priority sent in the body as 'priority'. Lower = "
+             "higher priority. Requires the server to be running with "
+             "--scheduling-policy priority. Conventions: orchestrator=-10, "
+             "default worker=0 (omit), background worker=10.",
+    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--report-name", default=None)
     args = parser.parse_args()
@@ -300,6 +317,7 @@ async def amain():
             "served_model": args.model,
             "max_tokens": args.max_tokens,
             "concurrencies": concurrencies,
+            "priority": args.priority,
             "timestamp": timestamp,
             "machine": specs.as_dict(),
         },
@@ -308,7 +326,10 @@ async def amain():
     # Warmup: one request to trigger any first-time loads.
     print("[warmup] single request ...", flush=True)
     async with httpx.AsyncClient() as client:
-        await _one_request(client, args.base_url, args.model, DEFAULT_PROMPTS[0], 32)
+        await _one_request(
+            client, args.base_url, args.model, DEFAULT_PROMPTS[0], 32,
+            priority=args.priority,
+        )
 
     # Continuous bandwidth sampler around the whole sweep.
     sampler: BandwidthSampler | None = None
@@ -329,9 +350,11 @@ async def amain():
     print(f"[sweep] C={concurrencies}, max_tokens={args.max_tokens}", flush=True)
     try:
         for c in concurrencies:
-            print(f"  C={c} ...", end=" ", flush=True)
+            tag = f" prio={args.priority}" if args.priority is not None else ""
+            print(f"  C={c}{tag} ...", end=" ", flush=True)
             r = await _run_concurrency(
                 args.base_url, args.model, DEFAULT_PROMPTS, c, args.max_tokens,
+                priority=args.priority,
             )
             bw_str = ""
             if sampler is not None:
