@@ -87,6 +87,23 @@ python3 scripts/benchmark-compare.py \
     --report-name 35b-sweep
 ```
 
+## vllm-mlx server benchmark
+For measuring continuous-batching throughput against a real OpenAI-compatible
+server (rather than in-process `mlx_lm.batch_generate`):
+```bash
+# Terminal A: launch the server (default port 8000, served-model-name=opus-mxfp4)
+scripts/run-vllm-mlx-server.sh
+
+# Terminal B: benchmark with the same prompts/concurrencies as benchmark-concurrency.py
+python3 scripts/benchmark-vllm-mlx-client.py \
+    --concurrencies 1,2,4,8,16,32 --max-tokens 256 \
+    --report-name vllm-mlx-baseline
+```
+The client driver matches the in-process probe's metric shape (aggregate /
+per-stream tok/s, TTFT p50/p95, wall p95, mactop bandwidth + GPU power) so the
+two reports can be diffed directly. JSON output also includes a Prometheus
+snapshot from the server's `/metrics` endpoint for cross-validation.
+
 ## Conventions
 - **Naming**: `--report-name` should describe the cohort and any non-default
   setting. Examples: `35b-all-variants`, `mxfp4-pair`, `long-context-mxfp4`,
