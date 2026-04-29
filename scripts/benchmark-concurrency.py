@@ -242,8 +242,12 @@ def main():
         help="Comma-separated batch sizes to sweep (default: 1,2,4,8,16,32)",
     )
     parser.add_argument(
-        "--threads-control", type=int, default=4,
-        help="Threads for the negative-control test. 0 = skip. (default: 4)",
+        "--threads-control", type=int, default=0,
+        help="Threads for the negative-control test (0 = skip, default). "
+             "WARNING: under heavy/loaded GPU state this has been observed to "
+             "trigger Metal command-buffer hangs (kIOGPUCommandBufferCallback"
+             "ErrorHang). The known result is ~1.44x at 4 threads, well below "
+             "batched scaling, so leaving this off by default.",
     )
     parser.add_argument(
         "--bandwidth-sampling", action="store_true", default=True,
@@ -394,12 +398,12 @@ def main():
     else:
         print("[batch sweep] skipped (compat=FAIL)", flush=True)
 
-    # Phase 3: thread control.
+    # Phase 3: thread control (opt-in; can crash the GPU after a hot batch sweep).
     if args.threads_control > 0:
         n = args.threads_control
         print(
             f"\n[control] {n} OS threads each running stream_generate "
-            f"(expected: serialize on Metal stream, ~no aggregate uplift)",
+            f"(opt-in; may trigger Metal hangs after a heavy batch sweep)",
             flush=True,
         )
         # Warm baseline so kernel cache is hot.
