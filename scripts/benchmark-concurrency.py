@@ -431,9 +431,15 @@ def main():
     # Save.
     args.output_dir.mkdir(parents=True, exist_ok=True)
     stem = args.report_name or f"concurrency-{timestamp}"
-    json_path = args.output_dir / f"{stem}.json"
+    json_path = (args.output_dir / f"{stem}.json").resolve()
     json_path.write_text(json.dumps(out, indent=2))
-    print(f"\n[done] report={json_path.relative_to(REPO_ROOT)}", flush=True)
+    # Print a repo-relative path when possible; fall back to absolute so a
+    # relative --output-dir doesn't crash the success print.
+    try:
+        display = json_path.relative_to(REPO_ROOT)
+    except ValueError:
+        display = json_path
+    print(f"\n[done] report={display}", flush=True)
 
     _free_memory()
 
