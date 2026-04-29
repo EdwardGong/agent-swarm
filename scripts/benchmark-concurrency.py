@@ -27,10 +27,15 @@ import datetime as dt
 import gc
 import json
 import os
+import statistics
 import sys
 import threading
 import time
 from pathlib import Path
+
+# Make sibling helper module importable when run as a script.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _bench_lib import BandwidthSampler, detect_machine_specs  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL = "~/models/qwen3.6-35b-opus-abl-mxfp4-mlx"
@@ -162,12 +167,29 @@ def measure_thread_control(
     total_wall = time.perf_counter() - t_wall_start
 
     total_gen = sum(r["gen_tokens"] for r in results)
+    elapsed_list = [r["elapsed"] for r in results]
+    tps_list = [r["tps"] for r in results]
+
+    def _pct(xs: list[float], q: float) -> float:
+        if not xs:
+            return 0.0
+        s = sorted(xs)
+        # Nearest-rank (simple, fine for small N).
+        k = max(0, min(len(s) - 1, int(round(q * (len(s) - 1)))))
+        return s[k]
+
     return {
         "n_threads": n_threads,
         "total_wall_seconds": total_wall,
         "aggregate_tps": (total_gen / total_wall) if total_wall > 0 else 0.0,
-        "per_stream_tps": [r["tps"] for r in results],
-        "per_stream_elapsed": [r["elapsed"] for r in results],
+        "per_stream_tps": tps_list,
+        "per_stream_elapsed": elapsed_list,
+        "per_stream_elapsed_p50": _pct(elapsed_list, 0.50),
+        "per_stream_elapsed_p95": _pct(elapsed_list, 0.95),
+        "per_stream_elapsed_max": max(elapsed_list) if elapsed_list else 0.0,
+        "per_stream_tps_stdev": (
+            statistics.stdev(tps_list) if len(tps_list) > 1 else 0.0
+        ),
     }
 
 
@@ -216,12 +238,24 @@ def main():
         help="Generation length per stream (default: 256)",
     )
     parser.add_argument(
-        "--batches", default="1,2,4,8",
-        help="Comma-separated batch sizes to sweep (default: 1,2,4,8)",
+        "--batches", default="1,2,4,8,16,32",
+        help="Comma-separated batch sizes to sweep (default: 1,2,4,8,16,32)",
     )
     parser.add_argument(
         "--threads-control", type=int, default=4,
         help="Threads for the negative-control test. 0 = skip. (default: 4)",
+    )
+    parser.add_argument(
+        "--bandwidth-sampling", action="store_true", default=True,
+        help="Sample DRAM bandwidth + GPU power via mactop during measurements (default: on).",
+    )
+    parser.add_argument(
+        "--no-bandwidth-sampling", dest="bandwidth_sampling", action="store_false",
+        help="Disable mactop bandwidth sampling.",
+    )
+    parser.add_argument(
+        "--bandwidth-interval-ms", type=int, default=1000,
+        help="mactop sampling interval in ms (default: 1000).",
     )
     parser.add_argument(
         "--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR,
@@ -234,6 +268,15 @@ def main():
 
     model_path = os.path.expanduser(args.model)
     model_name = os.path.basename(model_path.rstrip("/"))
+
+    specs = detect_machine_specs()
+    print(
+        f"[machine] {specs.chip} | gpu_cores={specs.gpu_core_count} | "
+        f"ram={specs.ram_gb:.1f} GB | dram_bw_spec={specs.dram_bandwidth_gbs} GB/s "
+        f"({specs.bandwidth_confidence})",
+        flush=True,
+    )
+
     print(f"[load] {model_name} (via mlx_lm)", flush=True)
     from mlx_lm import load as lm_load
     t0 = time.perf_counter()
@@ -254,6 +297,7 @@ def main():
             "threads_control": args.threads_control,
             "timestamp": timestamp,
             "load_seconds": load_s,
+            "machine": specs.as_dict(),
         },
     }
 
@@ -274,26 +318,74 @@ def main():
         # Light warmup at B=1 to compile kernels.
         _ = measure_batch(model, tokenizer, [prompt_ids], max_tokens=32)
 
+        # Continuous sampler across the entire sweep. Pre-warm so the first
+        # batch window has data (mactop's first sample lags ~5s).
+        sampler: BandwidthSampler | None = None
+        if args.bandwidth_sampling:
+            sampler = BandwidthSampler(
+                spec_gbs=specs.dram_bandwidth_gbs,
+                interval_ms=args.bandwidth_interval_ms,
+            )
+            sampler.start()
+            if sampler.unavailable_reason:
+                print(
+                    f"  [bandwidth] disabled: {sampler.unavailable_reason}",
+                    flush=True,
+                )
+                sampler = None
+            else:
+                print(
+                    "  [bandwidth] warming mactop (~5s for first sample)...",
+                    flush=True,
+                )
+                if not sampler.wait_until_warm(timeout_s=10.0):
+                    print("  [bandwidth] warm timeout; will record any later samples", flush=True)
+
         sweep_rows: list[dict] = []
-        for b in batch_sizes:
-            prompts_b = [
-                _format_chat_ids(tokenizer, DEFAULT_PROMPTS[i % len(DEFAULT_PROMPTS)])
-                for i in range(b)
-            ]
-            print(f"  B={b} ...", end=" ", flush=True)
-            try:
-                m = measure_batch(model, tokenizer, prompts_b, args.max_tokens)
+        try:
+            for b in batch_sizes:
+                prompts_b = [
+                    _format_chat_ids(tokenizer, DEFAULT_PROMPTS[i % len(DEFAULT_PROMPTS)])
+                    for i in range(b)
+                ]
+                print(f"  B={b} ...", end=" ", flush=True)
+                t_win_start = time.perf_counter()
+                try:
+                    m = measure_batch(model, tokenizer, prompts_b, args.max_tokens)
+                except Exception as e:
+                    print(f"FAIL ({type(e).__name__}: {e})", flush=True)
+                    sweep_rows.append({"batch_size": b, "error": f"{type(e).__name__}: {e}"})
+                    continue
+                t_win_end = time.perf_counter()
+
+                bw_str = ""
+                if sampler is not None:
+                    win_summary = sampler.summary_window(t_win_start, t_win_end)
+                    m["bandwidth"] = win_summary.as_dict()
+                    if win_summary.enabled:
+                        util = (
+                            f", bw_util_peak={win_summary.bw_util_peak_pct:.1f}%"
+                            if win_summary.bw_util_peak_pct is not None else ""
+                        )
+                        bw_str = (
+                            f" | gpu_pwr_peak={win_summary.gpu_power_peak_w:.1f} W"
+                            f" | dram_pwr_mean={win_summary.dram_power_mean_w:.1f} W"
+                            f" | dram_total_peak={win_summary.dram_total_peak_gbs:.1f} GB/s"
+                            f"{util}"
+                        )
                 sweep_rows.append(m)
                 print(
                     f"agg={m['generation_tps_aggregate']:.1f} tok/s, "
                     f"per-stream={m['generation_tps_per_stream']:.1f}, "
                     f"wall={m['wall_seconds']:.1f}s, "
-                    f"peak={m['peak_memory_gb']:.2f} GB",
+                    f"peak={m['peak_memory_gb']:.2f} GB" + bw_str,
                     flush=True,
                 )
-            except Exception as e:
-                print(f"FAIL ({type(e).__name__}: {e})", flush=True)
-                sweep_rows.append({"batch_size": b, "error": f"{type(e).__name__}: {e}"})
+        finally:
+            if sampler is not None:
+                sampler.stop()
+                out["bandwidth_global"] = sampler.summary.as_dict()
+
         out["batch_sweep"] = sweep_rows
         valid_rows = [r for r in sweep_rows if "error" not in r]
         if valid_rows:
