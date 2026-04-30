@@ -89,13 +89,17 @@ From `vllm-mlx serve --help` on v0.2.9. Not exhaustive — only what's relevant.
 - `--served-model-name opus-mxfp4` — short alias for client requests.
 
 ### Throughput knobs
-- `--max-num-seqs N` — concurrency cap. Set near the knee of our scaling
-  curve (per the in-process probe, B=16-32 is the throughput sweet spot
-  on M3 Max). Start at 16, raise if memory permits.
-- `--prefill-batch-size` and `--completion-batch-size` — see offline bench
-  notes; non-default values can buy a few percent.
+- `--max-num-seqs N` — concurrency cap. **Pinned at 32** in
+  `scripts/run-vllm-mlx-server.sh`: that's the throughput knee on M3 Max
+  48 GB. Briefly tried 64; OOMed at C=32 during repeated 512-token
+  sweeps and external advice agreed on dropping back. Raise again only
+  with a corresponding bump to `--max-cache-blocks` and verified KV
+  memory headroom at 512+ tokens.
+- `--prefill-batch-size` and `--completion-batch-size` — stage-specific.
+  Non-default values can buy a few percent.
 - `--chunked-prefill-tokens N` — caps prefill tokens per scheduler step;
-  `0` disables. Helps when long prompts collide with short-ttft streams.
+  `0` disables. Launcher uses **1024** (down from 2048) to flatten TTFT
+  at high concurrency.
 - `--prefill-step-size N` — granularity of prefill chunks (default 2048
   in upstream mlx_lm).
 
@@ -152,44 +156,8 @@ schedul` shows `--scheduling-policy {fcfs,priority}`).
 
 With the fork installed, both server-side `--scheduling-policy priority`
 and per-request `priority=N` (or OpenAI `extra_body={"priority": N}`)
-work end-to-end. The evidence below documents the v0.2.9 baseline gaps
-that the fork closes — keep it for context until the FR is upstreamed,
-at which point delete this section's evidence subsection.
-
-### Evidence (verified against the installed v0.2.9 in this venv)
-1. **No CLI flag**: `vllm-mlx serve --help | grep -i schedul` returns only
-   the unrelated `--chunked-prefill-tokens` help blurb. Exhaustive grep of
-   `vllm_mlx/**/*.py` for `--schedul*`, `scheduling_policy`,
-   `SchedulingPolicy`, `policy=` yields hits in only two files —
-   `scheduler.py:45-61` (the enum + dataclass field definition) and
-   nowhere in `cli.py`/`server.py`/`engine_core.py`/`api/*`.
-2. **CLI never passes `policy=`**: `cli.py:183-214` constructs
-   `SchedulerConfig(...)` for the serve command from argparse args; the
-   kwarg list does not include `policy`. Same for the offline-bench path
-   at `cli.py:314-333`. So `SchedulerConfig.policy` is always
-   `SchedulingPolicy.FCFS` (the dataclass default at `scheduler.py:61`).
-3. **Scheduler never reads `policy`**: `Scheduler` (`scheduler.py:1100`)
-   stores `self.config = config or SchedulerConfig()` but no codepath
-   branches on `self.config.policy` or compares against
-   `SchedulingPolicy.PRIORITY`. The waiting queue is
-   `self.waiting: deque[Request]` (line 1139) used as FIFO. The only
-   `priority`-adjacent mention in the file is a comment on line 2416
-   about the cache-corruption retry path that uses `deque.appendleft`.
-4. **API path never sets `Request.priority`**: every `Request(...)`
-   construction site (`engine_core.py:300`, `engine_core.py:517`) omits
-   `priority`. `AsyncEngineCore.add_request` (line 271) takes no
-   `priority` parameter, so even if the OpenAI / Anthropic adapter
-   parsed `extra_body["priority"]`, there is no kwarg to forward it on.
-   Grep of `api/*.py` confirms no `priority=` assignment.
-5. **`Request.__lt__` is dead code**: `request.py:180-184` orders by
-   `(priority, arrival_time)`, but no `bisect`, `heapq`, or `sorted()`
-   call in the package consumes it.
-
-Original (now-corrected) claim cited `cli.py:700,706` as evidence — those
-lines are actually the `extra_body` regex split inside
-`bench_serve_command`, not a scheduling-policy flag. The regex parses the
-bench-client's `--extra-body '{"a":1},{"b":2}'` argument; it has no
-relationship to per-request priority on the serve path.
+work end-to-end. See the fork commit on `feat/priority-scheduling`
+for the diff that closes the upstream wiring gaps.
 
 ### Using priority on the patched fork
 Launcher: pass `--scheduling-policy priority` (the fork accepts it).
@@ -262,9 +230,6 @@ From `~/models/qwen3.6-35b-opus-abl-mxfp4-mlx/config.json`:
   architecture allocates a single MTP head with shared embeddings.
   vllm-mlx's loader recognizes both this and the older
   `num_nextn_predict_layers` field (`engine/batched.py:323-328`).
-- Earlier playbook text claimed no MTP fields were present — that was
-  wrong; the recursive search now finds them under `text_config.*`.
-  The original top-level grep missed the nested keys.
 - Implication: the **abliterated/mxfp4 quantization pipeline dropped
   the MTP head weights from the safetensors**, so `--enable-mtp` is a
   no-op (the loader logs the skip and continues). This is fixable by
@@ -384,8 +349,7 @@ Raw JSON is split by `max_tokens`:
   ±2% at C=1, 4, 8, 16; ~10% faster at C=2). At C=32 the server is
   ~9% behind in-process (424.7 vs 468.6 tok/s) — a roughly constant
   per-step overhead (HTTP + SSE + detokenizer + scheduler), not
-  per-token. Earlier notes citing a ~20% gap were against v1; that's
-  no longer the operating point.
+  per-token.
 - **Bandwidth and power**: in-process peaks DRAM 162 GB/s (40.6% of
   spec) at GPU peak 51.8 W; v2 peaks DRAM 193 GB/s (48.3% of spec) at
   GPU peak 51.5 W. Neither configuration is bandwidth-bound; both are
@@ -398,57 +362,34 @@ Raw JSON is split by `max_tokens`:
   drift; B=1 is N=1 noise). Peak Metal climbs only 22.9 GB → 23.2 GB
   at B=32. The 512-token server pairing has been re-collected
   (`512-tokens/vllm-mlx-baseline.json`).
-- **Headroom**: v2 reports `cache_utilization_ratio = 0.178` at C=32 —
-  the paged pool is barely populated, so concurrency can rise well
-  past 32 before memory becomes the bottleneck. A previous 512-token
-  server run at C=64 collapsed to 9.7 tok/s aggregate, flagging a knee
-  somewhere between C=32 and C=64 worth bisecting separately.
-- **Stale fix history**: an earlier installation against the v0.2.9
-  PyPI wheel hit 100% request failure with the stream-binding error.
-  The fix shipped on master post-v0.2.9. If the launcher starts
-  failing again, check whether `pip install vllm-mlx` reinstalled the
-  pinned 0.2.9 wheel and dropped the master fix — reinstall from
-  master in that case.
+- **Why the cap is 32**: a 512-token sweep at C=64 collapsed to 9.7
+  tok/s aggregate (paged-cache eviction storm or scheduler thrash near
+  the memory ceiling). At C=32 with paged cache the pool is only ~18%
+  full at 256-token max length, so there's slack for longer contexts;
+  the launcher pins `--max-num-seqs 32` to stay on the safe side of
+  that knee.
 
 ## Open TODOs
 - Verify whether `--moe-top-k` exists in this install (or a flag with a
   similar name) and benchmark its quality impact on Opus-distilled weights.
 - Asymmetric K/V quantization (K8/V4) is not exposed in v0.2.9 — file an FR.
-- Re-bench with `--chunked-prefill-tokens` ∈ {512, 1024, 2048} to see if a
-  smaller chunk further flattens TTFT at high C. The launcher already runs
-  with 2048, and v2 still hits TTFT p95 ~2.4 s at C=32.
-- ~~Re-bench with `--use-paged-cache` against master HEAD now that the
-  thread-binding bug is fixed.~~ **DONE** (Apr 29 2026): paged cache lifts
-  decode tok/s 9–19% across C=1..32 vs `memory_aware_cache`. See
-  `reports/benchmarks/qwen3.6-35b-parallel/256-tokens/vllm-mlx-baseline-v2.json`
-  and `../vllm-mlx-vs-in-process.md`.
-- Sweep `--max-num-seqs` ∈ {32, 48, 64} at max_tokens=256 to locate the
-  new throughput knee (cache utilization is only 17.8% at C=32 with paged
-  cache; lots of room to grow).
-- ~~Re-collect the server-side 512-token sweep into
-  `reports/benchmarks/qwen3.6-35b-parallel/512-tokens/vllm-mlx-baseline.json`.~~
-  **DONE** (Apr 29 2026); paired in-proc reference also in place at
-  `512-tokens/mlx-lm-baseline.json`.
-- Bisect the C=64 collapse seen at max_tokens=512 — likely paged-cache
-  exhaustion or scheduler thrash; re-run with a higher
-  `--max-cache-blocks` and explicit `--max-num-seqs 64`.
-- **Priority scheduling FR**: file upstream issue covering the 5 wiring
-  gaps documented in `Client prioritization`. Once it ships, restore the
-  priority-stress test (24 workers at `priority=0` + 4 orchestrator
-  requests at `priority=-10`, verify orchestrator wall_p95 ≪ worker mean).
+- Sweep `--chunked-prefill-tokens` ∈ {512, 2048} against the current
+  launcher value of 1024 at C=16, 32 to confirm 1024 is the right
+  TTFT/throughput trade-off (v2 still hits TTFT p95 ~2.4 s at C=32 with
+  the prior 2048).
+- **Priority scheduling FR**: file upstream issue covering the wiring
+  gaps the fork closes (`feat/priority-scheduling`). Once it ships,
+  restore the priority-stress test (24 workers at `priority=0` + 4
+  orchestrator requests at `priority=-10`, verify orchestrator
+  wall_p95 ≪ worker mean).
 - **Speculative decoding**: MTP is architecturally available on this
   Qwen3.5 MoE target but the current quant dropped the head weights.
   Highest-leverage follow-up: re-quantize from a base that retains the
   MTP head (look for `mtp.*` tensors in the safetensors index), then
   bench `--enable-mtp --mtp-num-draft-tokens 3`. As a fallback, file an
-  upstream FR for a `--draft-model` decode-time speculator and document
-  quality vs tok/s tradeoff.
+  upstream FR for a `--draft-model` decode-time speculator.
 - **Tokenizer regex warning**: server startup logs `[transformers] ...
-  incorrect regex pattern ... fix_mistral_regex=True ...`. Verified
-  Apr 29 2026: this is a transformers heuristic that fires on any
-  GPT-style BPE pre-tokenizer (`(?i:'s|'t|'re...)|[\p{L}\p{M}]+|...`),
-  not a real bug in the Qwen3.5 tokenizer. Setting `fix_mistral_regex=
-  True` would deviate from the tokenization the model was trained on,
-  so leave the flag off. The warning is identical between the in-process
-  baseline and the vllm-mlx server, so throughput diffs are still valid.
+  incorrect regex pattern ... fix_mistral_regex=True ...`. This is a
+  transformers heuristic that fires on any GPT-style BPE pre-tokenizer,
+  not a real bug in the Qwen3.5 tokenizer; leave the flag off.
   Re-evaluate if/when we run a quality benchmark.
