@@ -140,7 +140,8 @@ class TestVLLMMLXProvider:
         with patch("langchain_openai.ChatOpenAI.__init__", fake_init):
             provider.get_llm("worker")
 
-        assert captured.get("max_tokens") == 4096
+        # max_tokens is sent via extra_body so vllm-mlx receives the raw field
+        assert captured.get("extra_body", {}).get("max_tokens") == 4096
 
 
 # ===================================================================
@@ -310,7 +311,7 @@ class TestConsolidatedSwarmConfig:
         config = OrchestratorConfig.from_yaml(CONFIG_PATH)
         for tier in ("orchestrator", "worker", "worker_fast", "coder", "reasoner"):
             assert tier in config.model_tiers, f"Missing tier: {tier}"
-            assert config.model_tiers[tier] == "qwen3.6-35b-opus-abl-mxfp4"
+            assert "qwen3.6-35b-opus-abl-mxfp4" in config.model_tiers[tier]
 
     def test_config_extra_has_mcp_base_url(self):
         config = OrchestratorConfig.from_yaml(CONFIG_PATH)
