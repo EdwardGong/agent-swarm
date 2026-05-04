@@ -1,0 +1,48 @@
+{
+  "_comment": "mcp-core.json — Tier 1: always-on servers, $0/mo, all profiles include these.",
+  "mcpServers": {
+    "lmcp": {
+      "_comment": "LMCP — 111 tools for macOS native apps (Mail, Calendar, Contacts, Teams, Slack, WhatsApp, OneDrive, Notes, Reminders, iMessage, Safari, Office). Proprietary license, currently free. Lock in install now.",
+      "command": "npx",
+      "args": ["-y", "local-mcp"],
+      "env": {}
+    },
+    "filesystem": {
+      "_comment": "Sandboxed file read/write/search. MIT.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/edward/workspace/ai/agent-swarm/runtime",
+        "/Users/edward/workspace"
+      ],
+      "env": {}
+    },
+    "git": {
+      "_comment": "Repo operations: status, diff, commit, log, branch. MIT.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-git",
+        "--repository", "/Users/edward/workspace/ai/agent-swarm"
+      ],
+      "env": {}
+    },
+    "sqlite": {
+      "_comment": "Persistent CRM database. Agents query via natural SQL. MIT.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite",
+        "/Users/edward/workspace/ai/agent-swarm/runtime/state.db"
+      ],
+      "env": {}
+    },
+    "memory": {
+      "_comment": "Knowledge graph for cross-session entity relationships. Complements SQLite — SQLite stores facts, Memory MCP stores relationships and observations. Official Anthropic reference server, MIT.",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {}
+    }
+  }
+}

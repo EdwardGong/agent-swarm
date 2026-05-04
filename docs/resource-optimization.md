@@ -60,10 +60,108 @@ python3 -m mlx_vlm convert \
 
 ## 128GB M5 Architecture Plan
 
-Run both models simultaneously:
-- Dense 27B for orchestrator (higher quality on hard coding, 77.2% vs 73.4% SWE-bench)
-- MoE 35B for fast workers (3-4× throughput)
-- Serve via `mlx_vlm.server` on separate ports
+> **Implementation:** `apps/consolidated_swarm/` — runs the full consolidated swarm
+> with native MCP support via vllm-mlx.
+
+### Runtime: vllm-mlx (replaces Ollama for this config)
+
+| Model | Role | Size | Port | Speed |
+|-------|------|------|------|-------|
+| `qwen3.6-35b-opus-abl-mxfp4` | All tiers (workers + orchestrator) | ~25 GB | 8000 | ~65-90 tok/s |
+| (optional) `qwen3.6-27b-instruct-Q4_K_M` dense | Orchestrator upgrade | ~16 GB | 8001 | ~20 tok/s |
+
+On 128 GB, both models can run simultaneously. The MoE 35B model serves all
+worker tiers by default. Swap the orchestrator tier to the dense 27B model
+(port 8001) for tasks requiring stronger single-turn reasoning.
+
+### Memory Budget
+
+| Component | Size |
+|-----------|------|
+| `qwen3.6-35b-opus-abl-mxfp4` weights | ~25 GB |
+| KV cache (`--cache-memory-percent 0.15` × 128 GB) | ~19 GB |
+| `mlx-community/all-MiniLM-L6-v2-4bit` embedding model | ~25 MB |
+| MCP servers + Node.js processes | ~1-2 GB |
+| Firecrawl Docker stack (Redis + PostgreSQL + Playwright) | ~2-4 GB |
+| FAISS index + OS + system overhead | ~5-8 GB |
+| **Free headroom for spike load / long contexts** | **~60-75 GB** |
+
+### Launch Command
+
+```bash
+export VLLM_MLX_MODEL_PATH=~/models/qwen3.6-35b-opus-abl-mxfp4-mlx
+
+taskpolicy -b vllm-mlx serve "$VLLM_MLX_MODEL_PATH" \
+  --port 8000 \
+  --continuous-batching \
+  --use-paged-cache \
+  --cache-memory-percent 0.15 \
+  --embedding-model mlx-community/all-MiniLM-L6-v2-4bit \
+  --reasoning-parser qwen3 \
+  --enable-auto-tool-choice \
+  --tool-call-parser qwen \
+  --mcp-config mcp-configs/mcp-core.json
+```
+
+Or use the wrapper script:
+
+```bash
+./apps/consolidated_swarm/scripts/start.sh
+```
+
+### Key vllm-mlx Flags
+
+| Flag | Value | Purpose |
+|------|-------|---------|
+| `--continuous-batching` | — | 2-3.4× throughput at 5 concurrent requests |
+| `--use-paged-cache` | — | Efficient KV memory reuse for prefix caching |
+| `--cache-memory-percent` | `0.15` | Reserves 19 GB for KV cache; auto-evicts stale entries. Raise to `0.20` if you see cache misses under load. |
+| `--embedding-model` | `mlx-community/all-MiniLM-L6-v2-4bit` | Powers FAISS ingestion without a separate embedding server |
+| `--reasoning-parser` | `qwen3` | Strips `<think>` blocks from qwen3.6 model output |
+| `--enable-auto-tool-choice` | — | Allows model to call tools automatically |
+| `--tool-call-parser` | `qwen` | Parses tool calls in Qwen format |
+| `--mcp-config` | `mcp-configs/mcp-core.json` | Loads MCP servers natively; switch profile per agent |
+
+### Native MCP Endpoints
+
+vllm-mlx exposes MCP management via three endpoints:
+
+```bash
+# Check loaded MCP servers
+curl -s http://localhost:8000/v1/mcp/status | python3 -m json.tool
+
+# List all available tools (optionally filter by profile)
+curl -s http://localhost:8000/v1/mcp/tools
+curl -s "http://localhost:8000/v1/mcp/tools?profile=research"
+
+# Execute a tool directly
+curl -s -X POST http://localhost:8000/v1/mcp/execute \
+  -H 'Content-Type: application/json' \
+  -d '{"tool": "filesystem_read_file", "arguments": {"path": "/path/to/file"}}'
+```
+
+### Context Window Sizing (128 GB)
+
+| Model | `num_ctx` / `max_tokens` | Notes |
+|-------|--------------------------|-------|
+| MoE 35B-A3B (MXFP4) | 131072 | Full 128K context fits comfortably in 128 GB |
+| Dense 27B (Q4_K_M) | 131072 | Leaves ~87 GB free for KV cache and system |
+
+### Efficiency Rules (128 GB)
+
+1. **Prefix cache is the biggest lever.** Shared system prompts across agents
+   = 80%+ KV cache hit rate. Keep agent system prompts stable between turns.
+2. **`--cache-memory-percent 0.15` is conservative.** 19 GB of KV cache
+   covers most multi-turn sessions. Increase to `0.20` if you have long research
+   loops; decrease to `0.10` if running Docker + Firecrawl + heavy background tasks.
+3. **4-8 parallel workers max.** vllm-mlx continuous batching batches requests
+   efficiently up to ~8 concurrent. Beyond that, per-request latency climbs.
+4. **Kill idle MCP servers.** LMCP + Filesystem stay always-on; Firecrawl
+   (Docker) and Safari MCP spin up on demand.
+5. **FAISS index < 2 GB.** Run `./apps/consolidated_swarm/scripts/cleanup.sh --faiss`
+   after long research sessions.
+6. **Context compaction every N steps.** Summarise accumulated results → FAISS
+   → prune context window. The research worker does this automatically at session end.
 
 ---
 

@@ -1,0 +1,68 @@
+{
+  "_comment": "mcp-research.json — research_agent profile. Extends core with Tier 2 web access + Tier 3 FAISS. Launch Firecrawl first: cd ~/workspace/firecrawl && docker compose up -d",
+  "mcpServers": {
+    "lmcp": {
+      "command": "npx",
+      "args": ["-y", "local-mcp"],
+      "env": {}
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/edward/workspace/ai/agent-swarm/runtime",
+        "/Users/edward/workspace"
+      ],
+      "env": {}
+    },
+    "git": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-git",
+        "--repository", "/Users/edward/workspace/ai/agent-swarm"
+      ],
+      "env": {}
+    },
+    "sqlite": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite",
+        "/Users/edward/workspace/ai/agent-swarm/runtime/state.db"
+      ],
+      "env": {}
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {}
+    },
+    "firecrawl": {
+      "_comment": "Firecrawl self-hosted (Docker, localhost:3002). Provides /v1/search (defaults to Google), /v1/scrape, /v1/crawl, /v1/map. WARNING: self-hosted lacks /agent, /browser, Fire-engine anti-bot. Use safari_mcp as fallback for bot-protected pages. Docker overhead ~2-4 GB RAM.",
+      "command": "npx",
+      "args": ["-y", "firecrawl-mcp"],
+      "env": {
+        "FIRECRAWL_API_URL": "http://localhost:3002",
+        "FIRECRAWL_API_KEY": "local"
+      }
+    },
+    "safari_mcp": {
+      "_comment": "Safari MCP — 80 tools, native WebKit, ~60% less CPU than Chrome. Uses your real logged-in Safari session. Useful for login-gated pages (LinkedIn, etc.) and as search fallback when Firecrawl is rate-limited. MIT. SECURITY: disable 'Allow JavaScript from Apple Events' in Safari → Develop when not running agents.",
+      "command": "npx",
+      "args": ["-y", "safari-mcp"],
+      "env": {}
+    },
+    "faiss": {
+      "_comment": "Local FAISS vector store for RAG. Embeddings via vllm-mlx --embedding-model. MIT.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "local-faiss-mcp",
+        "--index-dir", "/Users/edward/workspace/ai/agent-swarm/runtime/faiss_index"
+      ],
+      "env": {}
+    }
+  }
+}

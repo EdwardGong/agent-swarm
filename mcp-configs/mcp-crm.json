@@ -1,0 +1,44 @@
+{
+  "_comment": "mcp-crm.json — crm_agent profile. LMCP for Apple Contacts/Mail/Calendar; SQLite for structured CRM data; Memory MCP for relationships; Safari MCP for LinkedIn enrichment. $0/mo. Add Crispy.sh ($49/mo) later for API-level LinkedIn automation.",
+  "mcpServers": {
+    "lmcp": {
+      "_comment": "LMCP — Apple Contacts (list, search), Mail (search, send — preview + confirm), Calendar (list events), iMessage, Teams, Slack. 111 tools. Proprietary license, currently free.",
+      "command": "npx",
+      "args": ["-y", "local-mcp"],
+      "env": {}
+    },
+    "filesystem": {
+      "_comment": "Write output files (enrichment reports, outreach drafts). MIT.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/edward/workspace/ai/agent-swarm/runtime",
+        "/Users/edward/workspace/ai/agent-swarm/runtime"
+      ],
+      "env": {}
+    },
+    "sqlite": {
+      "_comment": "CRM database (contacts, interactions). Agents use INSERT OR REPLACE for upserts and SELECT for queries. MIT.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite",
+        "/Users/edward/workspace/ai/agent-swarm/runtime/state.db"
+      ],
+      "env": {}
+    },
+    "memory": {
+      "_comment": "Relationship knowledge graph — who knows whom, project context, interaction history. Use for 'who introduced me to X?' queries. Official Anthropic reference, MIT.",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {}
+    },
+    "safari_mcp": {
+      "_comment": "Safari MCP for LinkedIn profile enrichment (uses your real logged-in session — bypasses most bot detection). SECURITY: Enable 'Allow JavaScript from Apple Events' only when running CRM tasks. MIT.",
+      "command": "npx",
+      "args": ["-y", "safari-mcp"],
+      "env": {}
+    }
+  }
+}

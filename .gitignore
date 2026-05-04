@@ -13,3 +13,6 @@ build/
 
 # Generated benchmark outputs (timestamped per-model artifacts and report files).
 reports/benchmarks/
+
+# Runtime data — generated at startup, not versioned.
+runtime/

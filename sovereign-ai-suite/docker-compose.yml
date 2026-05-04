@@ -1,0 +1,29 @@
+services:
+  anythingllm:
+    image: mintplexlabs/anythingllm:latest
+    container_name: anythingllm
+    ports:
+      - "3001:3001"
+    volumes:
+      - anythingllm_storage:/app/server/storage
+    environment:
+      - STORAGE_DIR=/app/server/storage
+    restart: unless-stopped
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    ports:
+      - "3000:8080"
+    volumes:
+      - open-webui_data:/app/backend/data
+    environment:
+      - OPENAI_API_BASE_URL=http://host.docker.internal:8000/v1
+      - ENABLE_SIGNUP=true
+      - DEFAULT_MODEL=opus-mxfp4qwen3.6-35b-opus-abl-mxfp4-mlx
+      - OPENAI_API_KEY=sk-local   # dummy key
+    restart: unless-stopped
+
+volumes:
+  anythingllm_storage:
+  open-webui_data:

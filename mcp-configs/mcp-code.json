@@ -1,0 +1,32 @@
+{
+  "_comment": "mcp-code.json — code_agent profile. Filesystem + Git for read/write/commit; Safari MCP for docs browsing. Minimal footprint — no LMCP or Firecrawl.",
+  "mcpServers": {
+    "filesystem": {
+      "_comment": "Full workspace access for reading and writing code files. MIT.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/edward/workspace",
+        "/Users/edward/workspace/ai/agent-swarm/runtime/workspace"
+      ],
+      "env": {}
+    },
+    "git": {
+      "_comment": "Git operations — status, diff, add, commit, log, branch, push. MIT.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-git",
+        "--repository", "/Users/edward/workspace/ai/agent-swarm"
+      ],
+      "env": {}
+    },
+    "safari_mcp": {
+      "_comment": "Safari MCP for browsing library docs, MDN, crates.io, PyPI, etc. Optional — disable if unused to save resources. MIT.",
+      "command": "npx",
+      "args": ["-y", "safari-mcp"],
+      "env": {}
+    }
+  }
+}

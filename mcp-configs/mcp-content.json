@@ -1,0 +1,48 @@
+{
+  "_comment": "mcp-content.json — content_agent profile. Pulls research from FAISS, CRM context from SQLite/LMCP, writes output via Filesystem; Safari MCP for visual preview screenshots.",
+  "mcpServers": {
+    "filesystem": {
+      "_comment": "Read/write slides, reports, PPTX scripts. Output goes to <repo>/runtime/workspace/<project>/. MIT.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/edward/workspace/ai/agent-swarm/runtime/workspace",
+        "/Users/edward/workspace/ai/agent-swarm/runtime/faiss_index"
+      ],
+      "env": {}
+    },
+    "faiss": {
+      "_comment": "Pull research findings for slide content. Uses vllm-mlx embedding model. MIT.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "local-faiss-mcp",
+        "--index-dir", "/Users/edward/workspace/ai/agent-swarm/runtime/faiss_index"
+      ],
+      "env": {}
+    },
+    "sqlite": {
+      "_comment": "CRM context — relevant contacts, companies, deal context pulled via SELECT queries. MIT.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite",
+        "/Users/edward/workspace/ai/agent-swarm/runtime/state.db"
+      ],
+      "env": {}
+    },
+    "lmcp": {
+      "_comment": "LMCP for pulling CRM data from Apple Contacts (supplemental to SQLite) and for reading OneDrive/Notes for additional context. Proprietary, currently free.",
+      "command": "npx",
+      "args": ["-y", "local-mcp"],
+      "env": {}
+    },
+    "safari_mcp": {
+      "_comment": "Safari MCP for visual preview of slides (file:// URLs) and browsing reference material. MIT.",
+      "command": "npx",
+      "args": ["-y", "safari-mcp"],
+      "env": {}
+    }
+  }
+}

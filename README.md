@@ -37,7 +37,7 @@ sweep scheduler for recurring intelligence gathering.
 - **AgentSpec** — declarative description of an agent (name, capabilities, tools, model tier, prompt)
 - **AgentRegistry** — runtime store; auto-generates the orchestrator prompt from registered agents
 - **ToolSet / ToolRegistry** — named, tagged collections of LangChain tools
-- **ModelProvider** — protocol for any LLM backend (ships with `OllamaProvider`)
+- **ModelProvider** — protocol for any LLM backend (`OllamaProvider`, `VLLMMLXProvider`, `LlamaCppProvider`)
 - **Router** — pluggable routing strategy (`LLMRouter` or `RuleRouter`)
 - **Namespaced Memory** — ChromaDB-backed persistent memory with domain isolation
 - **build_graph()** — assembles a LangGraph workflow dynamically from the registries
@@ -49,7 +49,7 @@ sweep scheduler for recurring intelligence gathering.
 pip install -r requirements.txt
 
 # 2. Make sure Ollama is running with optimized settings
-#    (see RESOURCE_OPTIMIZATION.md for full setup)
+#    (see docs/resource-optimization.md for full setup)
 ollama serve &
 
 # 3. Run the research swarm
@@ -65,7 +65,7 @@ python -m apps.research_swarm.main --research "Topic to investigate"
 taskpolicy -b python -m apps.research_swarm.scheduler
 ```
 
-> **Apple Silicon users**: see [RESOURCE_OPTIMIZATION.md](RESOURCE_OPTIMIZATION.md)
+> **Apple Silicon users**: see [docs/resource-optimization.md](docs/resource-optimization.md)
 > for memory budgeting, model tier tuning, and operational tooling that
 > yields up to 70% faster inference.
 
@@ -158,7 +158,7 @@ app = build_graph(registry, tools, provider, router, config)
 
 ## Testing
 
-55 tests, no Ollama or network access required:
+80+ tests, no Ollama or vllm-mlx server required:
 
 ```bash
 PYTHONPATH=. pytest tests/ -v
@@ -173,28 +173,44 @@ agent-swarm/
 │   ├── graph.py               # Dynamic graph builder
 │   ├── router.py              # LLMRouter, RuleRouter
 │   ├── state.py               # OrchestratorState
-│   ├── models.py              # ModelProvider protocol + OllamaProvider
+│   ├── models.py              # OllamaProvider, VLLMMLXProvider, LlamaCppProvider
+│   ├── mcp.py                 # MCPToolRegistry (vllm-mlx native MCP bridge)
 │   ├── tools.py               # ToolSet, ToolRegistry
 │   └── config.py              # OrchestratorConfig
 ├── apps/
-│   └── research_swarm/        # Example application
-│       ├── agents.py           # 6 agent specs (market, research, writer, ...)
-│       ├── tools.py            # Tool implementations (web, file, market, memory)
-│       ├── memory.py           # Namespaced ChromaDB-backed research memory
-│       ├── scheduler.py        # Automated sweep scheduler (daemon or one-shot)
-│       ├── sweeps.yaml         # Recurring research job definitions
-│       ├── main.py             # CLI entry point
-│       └── config.yaml         # Model tiers and options
+│   ├── research_swarm/        # Ollama-backed research swarm (6 agents)
+│   │   ├── agents.py
+│   │   ├── tools.py
+│   │   ├── memory.py          # Namespaced ChromaDB research memory
+│   │   ├── scheduler.py       # Automated sweep scheduler
+│   │   ├── sweeps.yaml
+│   │   ├── main.py
+│   │   └── config.yaml
+│   └── consolidated_swarm/    # vllm-mlx + native MCP swarm (M5 Max 128GB)
+│       ├── agents.py          # 4 agents: research, code, crm, content
+│       ├── main.py            # CLI: --research / --crm / --content / --interactive
+│       ├── config.yaml        # qwen3.6-35b-opus-abl-mxfp4, vllm_mlx provider
+│       ├── workers/           # Standalone workflow modules (run() entry points)
+│       └── scripts/           # start.sh, monitor.sh, cleanup.sh
+├── mcp-configs/               # Per-agent MCP server profiles
+│   ├── mcp-core.json          # LMCP + Filesystem + Git + SQLite + Memory MCP
+│   ├── mcp-research.json      # core + Firecrawl (self-hosted) + Safari MCP + FAISS
+│   ├── mcp-code.json          # Filesystem + Git + Safari MCP
+│   ├── mcp-crm.json           # LMCP + SQLite + Memory + Safari MCP
+│   └── mcp-content.json       # Filesystem + FAISS + SQLite + LMCP + Safari MCP
+├── docs/
+│   └── resource-optimization.md  # Apple Silicon tuning, 128GB M5 architecture
 ├── tests/
-│   └── test_orchestrator.py   # 55 tests covering framework + app
-├── ARCHITECTURE.md            # Detailed design documentation
+│   ├── test_orchestrator.py   # Framework + research swarm (60 tests)
+│   └── test_consolidated_swarm.py  # consolidated_swarm integration tests
+├── ARCHITECTURE.md
 ├── README.md
 └── requirements.txt
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed design documentation.
 
-See [RESOURCE_OPTIMIZATION.md](RESOURCE_OPTIMIZATION.md) for Apple Silicon
+See [docs/resource-optimization.md](docs/resource-optimization.md) for Apple Silicon
 performance tuning, memory budgeting, and operational tooling.
 
 ## Nakama P0 Local Deployment

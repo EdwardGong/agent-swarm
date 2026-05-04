@@ -1,0 +1,42 @@
+# Consolidated Agent Swarm — M5 Max 128GB
+# Loaded by OrchestratorConfig.from_yaml()
+#
+# Runtime: vllm-mlx (OpenAI-compatible, port 8000)
+# Model:   qwen3.6-35b-opus-abl-mxfp4 (~20-30 GB, MXFP4, MoE 35B-A3B)
+#
+# Memory budget on 128 GB M5 Max:
+#   Model weights     :  ~25 GB
+#   KV cache (15%)    :  ~19 GB
+#   Embedding model   :  ~25 MB
+#   MCP servers + OS  :  ~10-15 GB
+#   Headroom / spikes :  ~60-75 GB
+
+routing_strategy: llm
+max_iterations: 20
+
+model_provider: vllm_mlx
+
+# All tiers served from the single vllm-mlx instance.
+# On 128 GB, a second instance at port 8001 can run the dense
+# qwen3.6-27b-instruct-Q4_K_M for the orchestrator tier if higher
+# single-token quality is needed (see docs/resource-optimization.md).
+model_tiers:
+  orchestrator: "qwen3.6-35b-opus-abl-mxfp4"
+  worker:       "qwen3.6-35b-opus-abl-mxfp4"
+  worker_fast:  "qwen3.6-35b-opus-abl-mxfp4"
+  worker_light: "qwen3.6-35b-opus-abl-mxfp4"
+  coder:        "qwen3.6-35b-opus-abl-mxfp4"
+  reasoner:     "qwen3.6-35b-opus-abl-mxfp4"
+
+model_options:
+  temperature: 0.0
+  max_tokens: 8192
+  # Thinking mode: disable for throughput (10-17% slower when on).
+  # Enable per-call if deep reasoning is required.
+  enable_thinking: false
+
+extra:
+  vllm_mlx_base_url: "http://localhost:8000/v1"
+  mcp_base_url:      "http://localhost:8000"
+  # MCP config profile files live in mcp-configs/ at repo root.
+  mcp_config_dir:    "mcp-configs"

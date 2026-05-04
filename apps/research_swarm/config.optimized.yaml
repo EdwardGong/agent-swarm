@@ -2,7 +2,7 @@
 #
 # This config replaces dense 32B/72B models with a single MoE model
 # (qwen3:30b-a3b) that provides equivalent quality at 70% faster
-# generation speed.  See RESOURCE_OPTIMIZATION.md for benchmarks.
+# generation speed.  See docs/resource-optimization.md for benchmarks.
 #
 # To use:  cp config.optimized.yaml config.yaml
 # Or:      OrchestratorConfig.from_yaml("apps/research_swarm/config.optimized.yaml")
