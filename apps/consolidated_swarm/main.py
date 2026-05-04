@@ -41,7 +41,9 @@ from apps.consolidated_swarm.agents import register_all as register_agents, MCP_
 
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
-logging.basicConfig(level=logging.WARNING)
+_LOG_FMT = "%(asctime)s %(levelname)-7s [%(name)s] %(message)s"
+_LOG_DATEFMT = "%H:%M:%S"
+logging.basicConfig(level=logging.WARNING, format=_LOG_FMT, datefmt=_LOG_DATEFMT)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -102,6 +104,8 @@ def _build_app():
 
 def run_query(query: str) -> str:
     """Route *query* through the swarm and return the final answer."""
+    import time
+    t0 = time.monotonic()
     app = _build_app()
     print("\n🧠 Orchestrator thinking...\n")
 
@@ -128,6 +132,8 @@ def run_query(query: str) -> str:
                     preview = r[:300] + "..." if len(r) > 300 else r
                     print(f"  ✅ {node_name}: {preview}")
 
+    elapsed = time.monotonic() - t0
+    print(f"  ⏱  Query completed in {elapsed:.1f}s")
     return final_answer
 
 
@@ -219,6 +225,9 @@ def main():
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
+        # Also enable orchestrator/worker debug logs
+        for mod in ("orchestrator", "apps.consolidated_swarm"):
+            logging.getLogger(mod).setLevel(logging.DEBUG)
 
     if args.research:
         answer = run_research(args.research)

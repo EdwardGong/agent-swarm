@@ -96,14 +96,19 @@ class VLLMMLXProvider:
 
         from langchain_openai import ChatOpenAI
 
+        max_tok = self._defaults.get("max_tokens", 4096)
+
         params: dict[str, Any] = {
             "model": model,
             "base_url": self._base_url,
             "api_key": "not-needed",  # vllm-mlx ignores auth by default
             "temperature": self._defaults.get("temperature", 0.0),
+            "request_timeout": self._defaults.get("request_timeout", 180),
+            # langchain-openai >=1.2 sends max_tokens as max_completion_tokens,
+            # which vllm-mlx does not recognise.  Pass via extra_body so the
+            # raw "max_tokens" field reaches the server.
+            "extra_body": {"max_tokens": max_tok},
         }
-        if "max_tokens" in self._defaults:
-            params["max_tokens"] = self._defaults["max_tokens"]
         params.update(kwargs)
         return ChatOpenAI(**params)
 

@@ -78,8 +78,7 @@ log "  Model:  ${MODEL_PATH}"
 log "  Port:   ${VLLM_PORT}"
 log "  MCP:    ${MCP_CONFIG_DIR}/mcp-core.json"
 
-# Run at background priority so interactive work is not starved.
-taskpolicy -b vllm-mlx serve "${MODEL_PATH}" \
+vllm-mlx serve "${MODEL_PATH}" \
   --port "${VLLM_PORT}" \
   --continuous-batching \
   --use-paged-cache \

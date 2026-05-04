@@ -21,12 +21,12 @@ model_provider: vllm_mlx
 # qwen3.6-27b-instruct-Q4_K_M for the orchestrator tier if higher
 # single-token quality is needed (see docs/resource-optimization.md).
 model_tiers:
-  orchestrator: "qwen3.6-35b-opus-abl-mxfp4"
-  worker:       "qwen3.6-35b-opus-abl-mxfp4"
-  worker_fast:  "qwen3.6-35b-opus-abl-mxfp4"
-  worker_light: "qwen3.6-35b-opus-abl-mxfp4"
-  coder:        "qwen3.6-35b-opus-abl-mxfp4"
-  reasoner:     "qwen3.6-35b-opus-abl-mxfp4"
+  orchestrator: "/Users/edward/models/qwen3.6-35b-opus-abl-mxfp4-mlx"
+  worker:       "/Users/edward/models/qwen3.6-35b-opus-abl-mxfp4-mlx"
+  worker_fast:  "/Users/edward/models/qwen3.6-35b-opus-abl-mxfp4-mlx"
+  worker_light: "/Users/edward/models/qwen3.6-35b-opus-abl-mxfp4-mlx"
+  coder:        "/Users/edward/models/qwen3.6-35b-opus-abl-mxfp4-mlx"
+  reasoner:     "/Users/edward/models/qwen3.6-35b-opus-abl-mxfp4-mlx"
 
 model_options:
   temperature: 0.0
