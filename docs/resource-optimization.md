@@ -91,7 +91,7 @@ worker tiers by default. Swap the orchestrator tier to the dense 27B model
 ```bash
 export VLLM_MLX_MODEL_PATH=~/models/qwen3.6-35b-opus-abl-mxfp4-mlx
 
-taskpolicy -b vllm-mlx serve "$VLLM_MLX_MODEL_PATH" \
+vllm-mlx serve "$VLLM_MLX_MODEL_PATH" \
   --port 8000 \
   --continuous-batching \
   --use-paged-cache \
@@ -102,6 +102,12 @@ taskpolicy -b vllm-mlx serve "$VLLM_MLX_MODEL_PATH" \
   --tool-call-parser qwen \
   --mcp-config mcp-configs/mcp-core.json
 ```
+
+> **Note:** Do not use `taskpolicy -b` to launch the inference server.
+> It restricts the process to efficiency cores and background I/O priority,
+> which halves generation throughput (~35 tok/s → ~65 tok/s).  Use
+> `taskpolicy -b` only for non-latency-critical background jobs like the
+> sweep scheduler.
 
 Or use the wrapper script:
 
@@ -436,6 +442,57 @@ ollama rm qwen2.5-coder:32b     # 19 GB — replaced by qwen3:30b-a3b
 
 Keep `qwen2.5:14b` as an on-demand fallback and the smaller models for
 the worker tiers.
+
+---
+
+## Troubleshooting — Consolidated Swarm
+
+### Queries hang or time out (504 Gateway Timeout)
+
+**Symptom:** The swarm routes a query to a worker agent, but the worker
+never returns.  vllm-mlx logs show tokens being generated for 300+s
+before a 504 cancellation.
+
+**Root cause:** `max_tokens` not reaching vllm-mlx.  `langchain-openai`
+≥1.2 silently maps the `max_tokens` constructor parameter to
+`max_completion_tokens` in the API request body.  vllm-mlx (and other
+OpenAI-compatible servers) only reads the `max_tokens` field, so the
+limit is ignored and the server defaults to its own maximum (32,768).
+
+**Fix (in `orchestrator/models.py`):** Pass `max_tokens` via `extra_body`
+so the raw field reaches the server:
+
+```python
+params["extra_body"] = {"max_tokens": max_tok}
+```
+
+Also set `request_timeout` (default 180s) on the `ChatOpenAI` instance
+as a hard backstop.
+
+### Model not found (404)
+
+**Symptom:** `NotFoundError: The model 'qwen3.6-35b-opus-abl-mxfp4'
+does not exist.  Available model: '/Users/.../qwen3.6-35b-opus-abl-mxfp4-mlx'`
+
+**Root cause:** vllm-mlx registers models by their full filesystem path.
+The model name in `config.yaml` must match exactly.
+
+**Fix:** Use the full path as the model name in `config.yaml`:
+
+```yaml
+model_tiers:
+  orchestrator: "/Users/edward/models/qwen3.6-35b-opus-abl-mxfp4-mlx"
+```
+
+### Slow generation (~35 tok/s instead of ~65 tok/s)
+
+**Symptom:** Token generation is roughly half the expected speed.
+
+**Root cause:** `taskpolicy -b` in the launch command restricts the
+process to efficiency cores and background QoS.
+
+**Fix:** Remove `taskpolicy -b` from `start.sh` / manual launch.
+Reserve it for the sweep scheduler and other non-latency-critical jobs.
 
 ---
 
